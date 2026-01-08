@@ -18,52 +18,14 @@
         </header>
 
         <nav class="tabs">
-            <button class="tab-btn active" data-tab="overview">Overview</button>
-            <button class="tab-btn" data-tab="transactions">Transactions</button>
+            <button class="tab-btn active" data-tab="transactions">Transactions</button>
             <button class="tab-btn" data-tab="statistics">Statistics</button>
             <button class="tab-btn" data-tab="contributions">Contributions</button>
             <button class="tab-btn" data-tab="projections">Projections</button>
         </nav>
 
-        <!-- Overview Tab -->
-        <div id="overview" class="tab-content active">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Total Transactions</h3>
-                    <p class="stat-value" id="totalTransactions">-</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Total Deposits</h3>
-                    <p class="stat-value positive" id="totalDeposits">-</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Total Withdrawals</h3>
-                    <p class="stat-value negative" id="totalWithdrawals">-</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Net Change</h3>
-                    <p class="stat-value" id="netChange">-</p>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>Deposits by Source</h2>
-                <div id="depositsBySource" class="list-view"></div>
-            </div>
-
-            <div class="section">
-                <h2>Monthly Breakdown</h2>
-                <div id="monthlyBreakdown" class="table-container"></div>
-            </div>
-
-            <div class="section">
-                <h2>Recurring Transactions</h2>
-                <div id="recurringTransactions" class="list-view"></div>
-            </div>
-        </div>
-
         <!-- Transactions Tab -->
-        <div id="transactions" class="tab-content">
+        <div id="transactions" class="tab-content active">
             <div class="filters">
                 <input type="text" id="searchInput" placeholder="Search description...">
                 <input type="date" id="startDate" placeholder="Start Date">

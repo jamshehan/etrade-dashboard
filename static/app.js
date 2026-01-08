@@ -9,7 +9,6 @@ let currentFilters = {};
 document.addEventListener('DOMContentLoaded', () => {
     initializeTabs();
     initializeButtons();
-    loadOverview();
     loadTransactions();
     loadCategories();
     loadSources();
@@ -106,32 +105,7 @@ async function apiCall(endpoint, options = {}) {
     }
 }
 
-// Load overview data
-async function loadOverview() {
-    try {
-        const stats = await apiCall('/statistics');
-        const recurring = await apiCall('/recurring');
-
-        displayOverviewStats(stats.data);
-        displayDepositsBySource(stats.data.deposits_by_source, 'depositsBySource');
-        displayMonthlyBreakdown(stats.data.monthly_breakdown, 'monthlyBreakdown');
-        displayRecurringTransactions(recurring.data);
-    } catch (error) {
-        console.error('Failed to load overview:', error);
-    }
-}
-
-function displayOverviewStats(stats) {
-    document.getElementById('totalTransactions').textContent = stats.total_transactions || 0;
-    document.getElementById('totalDeposits').textContent = formatCurrency(stats.total_deposits || 0);
-    document.getElementById('totalWithdrawals').textContent = formatCurrency(stats.total_withdrawals || 0);
-
-    const netChange = stats.net_change || 0;
-    const netElement = document.getElementById('netChange');
-    netElement.textContent = formatCurrency(netChange);
-    netElement.className = 'stat-value ' + (netChange >= 0 ? 'positive' : 'negative');
-}
-
+// Deposits by source display (used by Statistics tab)
 function displayDepositsBySource(deposits, containerId) {
     const container = document.getElementById(containerId);
     if (!deposits || deposits.length === 0) {
@@ -176,21 +150,6 @@ function displayMonthlyBreakdown(monthly, containerId) {
             </tbody>
         </table>
     `;
-}
-
-function displayRecurringTransactions(recurring) {
-    const container = document.getElementById('recurringTransactions');
-    if (!recurring || recurring.length === 0) {
-        container.innerHTML = '<p class="loading">No recurring transactions found</p>';
-        return;
-    }
-
-    container.innerHTML = recurring.slice(0, 10).map(item => `
-        <div class="list-item">
-            <span class="list-item-label">${item.description} (${item.occurrences}x)</span>
-            <span class="list-item-value">${formatCurrency(item.avg_amount)}</span>
-        </div>
-    `).join('');
 }
 
 // Load transactions
@@ -772,7 +731,6 @@ function formatDate(dateString) {
 }
 
 function refreshAll() {
-    loadOverview();
     loadTransactions();
     loadStatistics();
 }
