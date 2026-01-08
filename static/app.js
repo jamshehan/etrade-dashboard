@@ -37,6 +37,8 @@ function initializeTabs() {
                 loadContributionStatistics();
                 loadPersonMappings();
                 populatePersonFilter();
+            } else if (tabName === 'projections') {
+                loadProjectionData();
             }
         });
     });
@@ -68,8 +70,6 @@ function initializeButtons() {
     document.getElementById('nextPage').addEventListener('click', () => changePage(1));
 
     // Projections
-    document.getElementById('addDepositBtn').addEventListener('click', () => addRecurringItem('deposit'));
-    document.getElementById('addWithdrawalBtn').addEventListener('click', () => addRecurringItem('withdrawal'));
     document.getElementById('calculateProjectionBtn').addEventListener('click', calculateProjection);
 
     // Contributions
@@ -379,43 +379,86 @@ async function scrapeTransactions() {
 }
 
 // Projections
-function addRecurringItem(type) {
-    const containerId = type === 'deposit' ? 'recurringDepositsForm' : 'recurringWithdrawalsForm';
-    const container = document.getElementById(containerId);
 
-    const itemDiv = document.createElement('div');
-    itemDiv.className = 'recurring-item';
-    itemDiv.innerHTML = `
-        <input type="text" placeholder="Description" class="description">
-        <input type="number" step="0.01" placeholder="Amount" class="amount">
-        <select class="frequency">
-            <option value="weekly">Weekly</option>
-            <option value="biweekly">Biweekly</option>
-            <option value="monthly" selected>Monthly</option>
-            <option value="quarterly">Quarterly</option>
-            <option value="yearly">Yearly</option>
-        </select>
-        <button class="btn btn-small" onclick="this.parentElement.remove()">Remove</button>
-    `;
+async function loadProjectionData() {
+    try {
+        // Fetch latest transaction for current balance
+        const transactionsResult = await apiCall('/transactions?limit=1');
+        const latestTransaction = transactionsResult.data[0];
+        const currentBalance = latestTransaction ? latestTransaction.balance : 0;
 
-    container.appendChild(itemDiv);
+        // Fetch contribution statistics for monthly average
+        const statsResult = await apiCall('/contributions/statistics');
+        const byPerson = statsResult.data.by_person || [];
+        const monthlyData = statsResult.data.monthly_by_person || [];
+
+        // Calculate average monthly contributions
+        let avgMonthlyContributions = 0;
+        if (monthlyData.length > 0) {
+            // Get unique months
+            const uniqueMonths = new Set(monthlyData.map(item => item.month));
+            const totalContributions = byPerson.reduce((sum, p) => sum + p.total, 0);
+            avgMonthlyContributions = totalContributions / uniqueMonths.size;
+        }
+
+        // Fixed recurring withdrawals
+        const monthlyWithdrawals = 2605.57; // $1,827.57 + $778
+        const monthlyNet = avgMonthlyContributions - monthlyWithdrawals;
+
+        // Update source data display
+        document.getElementById('projSourceBalance').textContent = formatCurrency(currentBalance);
+        document.getElementById('projSourceDeposits').textContent = formatCurrency(avgMonthlyContributions);
+        document.getElementById('projSourceWithdrawals').textContent = formatCurrency(monthlyWithdrawals);
+
+        const monthlyNetElement = document.getElementById('projSourceNet');
+        monthlyNetElement.textContent = formatCurrency(monthlyNet);
+        monthlyNetElement.className = 'stat-value ' + (monthlyNet >= 0 ? 'positive' : 'negative');
+
+        // Store data for calculateProjection
+        window.projectionSourceData = {
+            currentBalance,
+            avgMonthlyContributions,
+            monthlyWithdrawals
+        };
+
+    } catch (error) {
+        console.error('Failed to load projection data:', error);
+    }
 }
 
 async function calculateProjection() {
-    const currentBalance = parseFloat(document.getElementById('currentBalance').value) || 0;
+    // Get projection period
     const months = parseInt(document.getElementById('projectionMonths').value) || 12;
 
-    const recurringDeposits = Array.from(document.querySelectorAll('#recurringDepositsForm .recurring-item')).map(item => ({
-        description: item.querySelector('.description').value,
-        amount: parseFloat(item.querySelector('.amount').value) || 0,
-        frequency: item.querySelector('.frequency').value
-    }));
+    // Use auto-loaded data
+    if (!window.projectionSourceData) {
+        console.error('Projection source data not loaded');
+        return;
+    }
 
-    const recurringWithdrawals = Array.from(document.querySelectorAll('#recurringWithdrawalsForm .recurring-item')).map(item => ({
-        description: item.querySelector('.description').value,
-        amount: parseFloat(item.querySelector('.amount').value) || 0,
-        frequency: item.querySelector('.frequency').value
-    }));
+    const { currentBalance, avgMonthlyContributions, monthlyWithdrawals } = window.projectionSourceData;
+
+    // Create recurring deposits and withdrawals for API
+    const recurringDeposits = [
+        {
+            description: 'Average Monthly Contributions',
+            amount: avgMonthlyContributions,
+            frequency: 'monthly'
+        }
+    ];
+
+    const recurringWithdrawals = [
+        {
+            description: 'Withdrawal on 1st',
+            amount: 1827.57,
+            frequency: 'monthly'
+        },
+        {
+            description: 'Withdrawal on 5th',
+            amount: 778.00,
+            frequency: 'monthly'
+        }
+    ];
 
     try {
         const result = await apiCall('/projections', {

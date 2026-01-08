@@ -212,30 +212,43 @@
         <!-- Projections Tab -->
         <div id="projections" class="tab-content">
             <div class="section">
-                <h2>Balance Projection Settings</h2>
+                <h2>Balance Projection</h2>
+                <p>Projection based on your latest balance, average contributions, and recurring withdrawals.</p>
+
                 <div class="projection-form">
                     <div class="form-group">
-                        <label>Current Balance:</label>
-                        <input type="number" id="currentBalance" step="0.01" placeholder="0.00">
+                        <label>Projection Period:</label>
+                        <select id="projectionMonths">
+                            <option value="6">6 months</option>
+                            <option value="12" selected>12 months</option>
+                            <option value="24">24 months</option>
+                            <option value="36">36 months</option>
+                        </select>
                     </div>
-                    <div class="form-group">
-                        <label>Projection Months:</label>
-                        <input type="number" id="projectionMonths" value="12" min="1" max="120">
-                    </div>
+                    <button id="calculateProjectionBtn" class="btn btn-primary">Calculate Projection</button>
                 </div>
 
-                <h3>Recurring Deposits</h3>
-                <div id="recurringDepositsForm"></div>
-                <button id="addDepositBtn" class="btn btn-small">+ Add Deposit</button>
-
-                <h3>Recurring Withdrawals</h3>
-                <div id="recurringWithdrawalsForm"></div>
-                <button id="addWithdrawalBtn" class="btn btn-small">+ Add Withdrawal</button>
-
-                <button id="calculateProjectionBtn" class="btn btn-primary">Calculate Projection</button>
+                <div class="stats-grid" style="margin-top: 20px;">
+                    <div class="stat-card">
+                        <h3>Current Balance</h3>
+                        <p class="stat-value" id="projSourceBalance">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Avg Monthly Contributions</h3>
+                        <p class="stat-value positive" id="projSourceDeposits">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Monthly Withdrawals</h3>
+                        <p class="stat-value negative" id="projSourceWithdrawals">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Monthly Net</h3>
+                        <p class="stat-value" id="projSourceNet">-</p>
+                    </div>
+                </div>
             </div>
 
-            <div id="projectionResults" class="section hidden">
+            <div id="projectionResults" class="section">
                 <h2>Projection Results</h2>
                 <div class="stats-grid">
                     <div class="stat-card">
