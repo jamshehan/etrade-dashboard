@@ -582,59 +582,48 @@ function displayContributionStatistics(stats) {
     const totalContributors = byPerson.length;
     const totalAmount = byPerson.reduce((sum, p) => sum + p.total, 0);
     const totalCount = byPerson.reduce((sum, p) => sum + p.count, 0);
-    const topContributor = byPerson.length > 0 ? `${byPerson[0].person_name} (${formatCurrency(byPerson[0].total)})` : 'None';
 
     document.getElementById('totalContributors').textContent = totalContributors;
     document.getElementById('totalContributionAmount').textContent = formatCurrency(totalAmount);
     document.getElementById('contributionTxnCount').textContent = totalCount;
-    document.getElementById('topContributor').textContent = topContributor;
 
-    // Display by person
+    // Calculate monthly averages from monthly_by_person data
+    const monthlyData = stats.monthly_by_person || [];
+    const monthCountByPerson = {};
+
+    monthlyData.forEach(item => {
+        if (!monthCountByPerson[item.person_name]) {
+            monthCountByPerson[item.person_name] = new Set();
+        }
+        monthCountByPerson[item.person_name].add(item.month);
+    });
+
+    // Display by person with monthly averages
     const byPersonContainer = document.getElementById('contributionsByPerson');
     if (!byPerson || byPerson.length === 0) {
         byPersonContainer.innerHTML = '<p class="loading">No contribution data available</p>';
     } else {
-        byPersonContainer.innerHTML = byPerson.map(person => `
-            <div class="list-item">
-                <span class="list-item-label">${person.person_name} (${person.count} txns)</span>
-                <span class="list-item-value positive">${formatCurrency(person.total)}</span>
-            </div>
-        `).join('');
-    }
-
-    // Display monthly breakdown
-    const monthlyContainer = document.getElementById('contributionsMonthlyBreakdown');
-    const monthlyData = stats.monthly_by_person || [];
-
-    if (!monthlyData || monthlyData.length === 0) {
-        monthlyContainer.innerHTML = '<p class="loading">No monthly data available</p>';
-    } else {
-        // Group by month
-        const byMonth = {};
-        monthlyData.forEach(item => {
-            if (!byMonth[item.month]) {
-                byMonth[item.month] = [];
-            }
-            byMonth[item.month].push(item);
-        });
-
-        monthlyContainer.innerHTML = `
+        byPersonContainer.innerHTML = `
             <table>
                 <thead>
                     <tr>
-                        <th>Month</th>
-                        <th>Person</th>
-                        <th>Amount</th>
+                        <th>Name</th>
+                        <th>Total</th>
+                        <th>Monthly Average</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${monthlyData.map(item => `
-                        <tr>
-                            <td>${item.month}</td>
-                            <td>${item.person_name}</td>
-                            <td class="amount-positive">${formatCurrency(item.total)}</td>
-                        </tr>
-                    `).join('')}
+                    ${byPerson.map(person => {
+                        const monthCount = monthCountByPerson[person.person_name] ? monthCountByPerson[person.person_name].size : 1;
+                        const monthlyAvg = person.total / monthCount;
+                        return `
+                            <tr>
+                                <td>${person.person_name}</td>
+                                <td class="amount-positive">${formatCurrency(person.total)}</td>
+                                <td class="amount-positive">${formatCurrency(monthlyAvg)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
                 </tbody>
             </table>
         `;

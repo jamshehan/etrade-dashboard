@@ -121,37 +121,7 @@
 
         <!-- Contributions Tab -->
         <div id="contributions" class="tab-content">
-            <!-- Section 1: Manage Person Mappings -->
-            <div class="section">
-                <h2>Manage Person Mappings</h2>
-                <p>Map keywords in transaction descriptions to person names to track contributions.</p>
-
-                <div class="filters" style="margin-bottom: 15px;">
-                    <input type="text" id="mappingPersonName" placeholder="Person Name (e.g., Joe Santamour)">
-                    <input type="text" id="mappingKeyword" placeholder="Keyword (e.g., JOSEPH SANTAMOU)">
-                    <button id="addMappingBtn" class="btn btn-primary">Add Mapping</button>
-                </div>
-
-                <div class="table-container">
-                    <table id="mappingsTable">
-                        <thead>
-                            <tr>
-                                <th>Person Name</th>
-                                <th>Keyword</th>
-                                <th>Created</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="mappingsTableBody">
-                            <tr>
-                                <td colspan="4" class="loading">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Section 2: Contribution Statistics -->
+            <!-- Section 1: Contribution Statistics -->
             <div class="section">
                 <h2>Contribution Statistics</h2>
 
@@ -165,23 +135,16 @@
                         <p class="stat-value positive" id="totalContributionAmount">-</p>
                     </div>
                     <div class="stat-card">
-                        <h3>Top Contributor</h3>
-                        <p class="stat-value small" id="topContributor">-</p>
-                    </div>
-                    <div class="stat-card">
                         <h3>Transaction Count</h3>
                         <p class="stat-value" id="contributionTxnCount">-</p>
                     </div>
                 </div>
 
                 <h3>By Person</h3>
-                <div id="contributionsByPerson" class="list-view"></div>
-
-                <h3>Monthly Breakdown</h3>
-                <div id="contributionsMonthlyBreakdown" class="table-container"></div>
+                <div id="contributionsByPerson" class="table-container"></div>
             </div>
 
-            <!-- Section 3: Contribution Transactions -->
+            <!-- Section 2: Contribution Transactions -->
             <div class="section">
                 <h2>Contribution Transactions</h2>
 
@@ -209,6 +172,36 @@
                         <tbody id="contributionsTableBody">
                             <tr>
                                 <td colspan="5" class="loading">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 3: Manage Person Mappings -->
+            <div class="section">
+                <h2>Manage Person Mappings</h2>
+                <p>Map keywords in transaction descriptions to person names to track contributions.</p>
+
+                <div class="filters" style="margin-bottom: 15px;">
+                    <input type="text" id="mappingPersonName" placeholder="Person Name (e.g., Joe Santamour)">
+                    <input type="text" id="mappingKeyword" placeholder="Keyword (e.g., JOSEPH SANTAMOU)">
+                    <button id="addMappingBtn" class="btn btn-primary">Add Mapping</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="mappingsTable">
+                        <thead>
+                            <tr>
+                                <th>Person Name</th>
+                                <th>Keyword</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mappingsTableBody">
+                            <tr>
+                                <td colspan="4" class="loading">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
