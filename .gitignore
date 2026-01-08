@@ -1,0 +1,35 @@
+# Environment and credentials
+.env
+*.env
+
+# Data files
+data/
+*.db
+*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright/.local-browsers/

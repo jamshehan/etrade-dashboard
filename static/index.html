@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eTrade Transaction Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>eTrade Transaction Dashboard</h1>
+            <div class="header-actions">
+                <button id="importCsvBtn" class="btn btn-primary">Import CSV</button>
+                <button id="scrapBtn" class="btn btn-success">Scrape eTrade</button>
+                <button id="refreshBtn" class="btn">Refresh</button>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="transactions">Transactions</button>
+            <button class="tab-btn" data-tab="statistics">Statistics</button>
+            <button class="tab-btn" data-tab="contributions">Contributions</button>
+            <button class="tab-btn" data-tab="projections">Projections</button>
+        </nav>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Transactions</h3>
+                    <p class="stat-value" id="totalTransactions">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Deposits</h3>
+                    <p class="stat-value positive" id="totalDeposits">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Withdrawals</h3>
+                    <p class="stat-value negative" id="totalWithdrawals">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Net Change</h3>
+                    <p class="stat-value" id="netChange">-</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Deposits by Source</h2>
+                <div id="depositsBySource" class="list-view"></div>
+            </div>
+
+            <div class="section">
+                <h2>Monthly Breakdown</h2>
+                <div id="monthlyBreakdown" class="table-container"></div>
+            </div>
+
+            <div class="section">
+                <h2>Recurring Transactions</h2>
+                <div id="recurringTransactions" class="list-view"></div>
+            </div>
+        </div>
+
+        <!-- Transactions Tab -->
+        <div id="transactions" class="tab-content">
+            <div class="filters">
+                <input type="text" id="searchInput" placeholder="Search description...">
+                <input type="date" id="startDate" placeholder="Start Date">
+                <input type="date" id="endDate" placeholder="End Date">
+                <select id="categoryFilter">
+                    <option value="">All Categories</option>
+                </select>
+                <select id="sourceFilter">
+                    <option value="">All Sources</option>
+                </select>
+                <button id="searchBtn" class="btn">Search</button>
+                <button id="clearFiltersBtn" class="btn">Clear</button>
+            </div>
+
+            <div class="table-container">
+                <table id="transactionsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Balance</th>
+                            <th>Category</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsBody">
+                        <tr>
+                            <td colspan="6" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <button id="prevPage" class="btn" disabled>Previous</button>
+                <span id="pageInfo">Page 1</span>
+                <button id="nextPage" class="btn">Next</button>
+            </div>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div id="statistics" class="tab-content">
+            <div class="filters">
+                <label>Date Range:</label>
+                <input type="date" id="statsStartDate">
+                <input type="date" id="statsEndDate">
+                <button id="updateStatsBtn" class="btn">Update</button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Transactions</h3>
+                    <p class="stat-value" id="statsTotalTransactions">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Deposits</h3>
+                    <p class="stat-value positive" id="statsTotalDeposits">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Withdrawals</h3>
+                    <p class="stat-value negative" id="statsTotalWithdrawals">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Net Change</h3>
+                    <p class="stat-value" id="statsNetChange">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Average Transaction</h3>
+                    <p class="stat-value" id="statsAvgTransaction">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Date Range</h3>
+                    <p class="stat-value small" id="statsDateRange">-</p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Deposits by Source</h2>
+                <div id="statsDepositsBySource" class="list-view"></div>
+            </div>
+
+            <div class="section">
+                <h2>Monthly Breakdown</h2>
+                <div id="statsMonthlyBreakdown" class="table-container"></div>
+            </div>
+
+            <div class="section">
+                <h2>By Category</h2>
+                <div id="statsByCategory" class="list-view"></div>
+            </div>
+        </div>
+
+        <!-- Contributions Tab -->
+        <div id="contributions" class="tab-content">
+            <!-- Section 1: Manage Person Mappings -->
+            <div class="section">
+                <h2>Manage Person Mappings</h2>
+                <p>Map keywords in transaction descriptions to person names to track contributions.</p>
+
+                <div class="filters" style="margin-bottom: 15px;">
+                    <input type="text" id="mappingPersonName" placeholder="Person Name (e.g., Joe Santamour)">
+                    <input type="text" id="mappingKeyword" placeholder="Keyword (e.g., JOSEPH SANTAMOU)">
+                    <button id="addMappingBtn" class="btn btn-primary">Add Mapping</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="mappingsTable">
+                        <thead>
+                            <tr>
+                                <th>Person Name</th>
+                                <th>Keyword</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mappingsTableBody">
+                            <tr>
+                                <td colspan="4" class="loading">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 2: Contribution Statistics -->
+            <div class="section">
+                <h2>Contribution Statistics</h2>
+
+                <div class="stats-grid" id="contributionStatsGrid">
+                    <div class="stat-card">
+                        <h3>Total Contributors</h3>
+                        <p class="stat-value" id="totalContributors">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Contributions</h3>
+                        <p class="stat-value positive" id="totalContributionAmount">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Top Contributor</h3>
+                        <p class="stat-value small" id="topContributor">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Transaction Count</h3>
+                        <p class="stat-value" id="contributionTxnCount">-</p>
+                    </div>
+                </div>
+
+                <h3>By Person</h3>
+                <div id="contributionsByPerson" class="list-view"></div>
+
+                <h3>Monthly Breakdown</h3>
+                <div id="contributionsMonthlyBreakdown" class="table-container"></div>
+            </div>
+
+            <!-- Section 3: Contribution Transactions -->
+            <div class="section">
+                <h2>Contribution Transactions</h2>
+
+                <div class="filters">
+                    <select id="personFilter">
+                        <option value="">All People</option>
+                    </select>
+                    <input type="date" id="contribStartDate" placeholder="Start Date">
+                    <input type="date" id="contribEndDate" placeholder="End Date">
+                    <button id="filterContributionsBtn" class="btn">Filter</button>
+                    <button id="clearContribFiltersBtn" class="btn">Clear</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="contributionsTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Person</th>
+                                <th>Amount</th>
+                                <th>Balance</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contributionsTableBody">
+                            <tr>
+                                <td colspan="5" class="loading">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Projections Tab -->
+        <div id="projections" class="tab-content">
+            <div class="section">
+                <h2>Balance Projection Settings</h2>
+                <div class="projection-form">
+                    <div class="form-group">
+                        <label>Current Balance:</label>
+                        <input type="number" id="currentBalance" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Projection Months:</label>
+                        <input type="number" id="projectionMonths" value="12" min="1" max="120">
+                    </div>
+                </div>
+
+                <h3>Recurring Deposits</h3>
+                <div id="recurringDepositsForm"></div>
+                <button id="addDepositBtn" class="btn btn-small">+ Add Deposit</button>
+
+                <h3>Recurring Withdrawals</h3>
+                <div id="recurringWithdrawalsForm"></div>
+                <button id="addWithdrawalBtn" class="btn btn-small">+ Add Withdrawal</button>
+
+                <button id="calculateProjectionBtn" class="btn btn-primary">Calculate Projection</button>
+            </div>
+
+            <div id="projectionResults" class="section hidden">
+                <h2>Projection Results</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Current Balance</h3>
+                        <p class="stat-value" id="projCurrentBalance">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Projected Balance</h3>
+                        <p class="stat-value" id="projFinalBalance">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Change</h3>
+                        <p class="stat-value" id="projTotalChange">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Monthly Net</h3>
+                        <p class="stat-value" id="projMonthlyNet">-</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Monthly Projection</h3>
+                    <div id="projectionChart" class="table-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import CSV Modal -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <h2>Import CSV File</h2>
+            <p>Enter the full path to your eTrade CSV file:</p>
+            <input type="text" id="csvPath" placeholder="C:\path\to\file.csv" style="width: 100%;">
+            <div class="modal-actions">
+                <button id="confirmImportBtn" class="btn btn-primary">Import</button>
+                <button id="cancelImportBtn" class="btn">Cancel</button>
+            </div>
+            <div id="importStatus" class="status-message"></div>
+        </div>
+    </div>
+
+    <!-- Scrape Modal -->
+    <div id="scrapeModal" class="modal">
+        <div class="modal-content">
+            <h2>Scrape eTrade Transactions</h2>
+            <p>This will log into eTrade and download transaction data.</p>
+            <div class="form-group">
+                <label>Start Date (optional):</label>
+                <input type="date" id="scrapeStartDate">
+            </div>
+            <div class="form-group">
+                <label>End Date (optional):</label>
+                <input type="date" id="scrapeEndDate">
+            </div>
+            <div class="modal-actions">
+                <button id="confirmScrapeBtn" class="btn btn-success">Start Scraping</button>
+                <button id="cancelScrapeBtn" class="btn">Cancel</button>
+            </div>
+            <div id="scrapeStatus" class="status-message"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
