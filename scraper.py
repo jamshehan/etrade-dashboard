@@ -1,5 +1,6 @@
 from playwright.sync_api import sync_playwright, Page, Browser
 from pathlib import Path
+from datetime import datetime, timedelta
 import time
 import config
 
@@ -34,7 +35,8 @@ class ETradeScraper:
             Path to downloaded CSV file
         """
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=self.headless)
+            # Force non-headless for MFA handling
+            browser = playwright.chromium.launch(headless=False)
 
             # Configure browser context with download directory
             context = browser.new_context(
@@ -46,9 +48,7 @@ class ETradeScraper:
 
             try:
                 print("Navigating to eTrade login page...")
-                # Navigate to eTrade login
-                # TODO: Replace with actual eTrade login URL
-                page.goto("https://us.etrade.com/login", timeout=self.timeout)
+                page.goto("https://us.etrade.com/e/t/user/login", timeout=self.timeout)
 
                 # Wait for page to load
                 time.sleep(2)
@@ -56,10 +56,10 @@ class ETradeScraper:
                 # Perform login
                 self._login(page)
 
-                # Navigate to checking account
-                self._navigate_to_checking(page)
+                # Handle MFA if needed
+                self._handle_mfa(page)
 
-                # Download CSV
+                # Navigate directly to download page
                 csv_path = self._download_csv(page, start_date, end_date)
 
                 print(f"Successfully downloaded transactions to: {csv_path}")
@@ -79,108 +79,132 @@ class ETradeScraper:
     def _login(self, page: Page):
         """
         Perform login to eTrade
-
-        NOTE: This method needs to be customized based on actual eTrade login flow
         """
         print("Logging in...")
 
         try:
-            # TODO: Replace these selectors with actual eTrade selectors
-            # You can find selectors by inspecting the eTrade login page
-
-            # Example selectors (THESE WILL NEED TO BE UPDATED):
             # Wait for username field
-            page.wait_for_selector('input[name="USER"]', timeout=self.timeout)
+            page.wait_for_selector('#USER', timeout=self.timeout)
 
             # Fill username
-            page.fill('input[name="USER"]', self.username)
+            page.fill('#USER', self.username)
 
             # Fill password
-            page.fill('input[name="PASSWORD"]', self.password)
+            page.fill('#password', self.password)
 
             # Click login button
-            page.click('button[type="submit"]')
+            page.click('#mfaLogonButton')
 
-            # Wait for login to complete
-            # TODO: Replace with actual selector that appears after successful login
-            page.wait_for_selector('text=Accounts', timeout=self.timeout)
-
-            print("Login successful")
-
-            # Handle potential 2FA or security questions
-            # TODO: Add 2FA handling if needed
-            time.sleep(3)
+            print("Login credentials submitted")
+            time.sleep(2)
 
         except Exception as e:
             raise Exception(f"Login failed: {str(e)}")
 
-    def _navigate_to_checking(self, page: Page):
+    def _handle_mfa(self, page: Page):
         """
-        Navigate to checking account transactions page
-
-        NOTE: This method needs to be customized based on actual eTrade navigation
+        Handle MFA if required
         """
-        print("Navigating to checking account...")
+        print("Checking for MFA...")
+        time.sleep(3)
 
         try:
-            # TODO: Replace with actual navigation steps for eTrade
+            # Check if we're on the send OTP page
+            if "sendotpcode" in page.url:
+                print("MFA required - triggering SMS code...")
+                page.click('#sendOTPCodeBtn')
+                time.sleep(2)
 
-            # Example navigation (THESE WILL NEED TO BE UPDATED):
-            # Click on checking account link
-            page.click('text=Checking')
+                # Wait for verification code page
+                page.wait_for_url("**/verifyotpcode", timeout=self.timeout)
 
-            # Wait for transactions to load
-            page.wait_for_selector('text=Transactions', timeout=self.timeout)
+                print("\n" + "="*60)
+                print("MFA CODE REQUIRED")
+                print("="*60)
+                print("1. Check your phone for the SMS code from eTrade")
+                print("2. Enter the code in the browser window that opened")
+                print("3. Check the 'Save this device' checkbox to skip MFA next time")
+                print("4. Click Submit")
+                print("="*60 + "\n")
 
-            print("Reached checking account page")
-            time.sleep(2)
+                # Wait for user to manually enter code and submit
+                # We'll wait until we're no longer on the verifyotpcode page
+                while "verifyotpcode" in page.url:
+                    time.sleep(1)
+
+                print("MFA completed successfully")
+                time.sleep(2)
+            elif "verifyotpcode" in page.url:
+                # Already on verification page (shouldn't normally happen)
+                print("\n" + "="*60)
+                print("MFA CODE REQUIRED")
+                print("="*60)
+                print("1. Check your phone for the SMS code")
+                print("2. Enter the code in the browser window")
+                print("3. Check 'Save this device' to skip MFA next time")
+                print("4. Click Submit")
+                print("="*60 + "\n")
+
+                while "verifyotpcode" in page.url:
+                    time.sleep(1)
+
+                print("MFA completed successfully")
+                time.sleep(2)
+            else:
+                print("No MFA required - device already trusted")
 
         except Exception as e:
-            raise Exception(f"Navigation failed: {str(e)}")
+            raise Exception(f"MFA handling failed: {str(e)}")
 
     def _download_csv(self, page: Page, start_date: str = None, end_date: str = None) -> Path:
         """
         Download transactions as CSV
-
-        NOTE: This method needs to be customized based on actual eTrade download flow
         """
-        print("Downloading CSV...")
+        print("Navigating to download page...")
 
         try:
-            # TODO: Replace with actual eTrade CSV download steps
+            # Navigate directly to the download page
+            page.goto("https://bankus.etrade.com/e/t/ibank/downloadofxtransactions", timeout=self.timeout)
+            time.sleep(2)
 
-            # Example download flow (THESE WILL NEED TO BE UPDATED):
+            # Wait for account selector
+            page.wait_for_selector('#AcctNum', timeout=self.timeout)
 
-            # 1. If date range needed, set filters
-            if start_date or end_date:
-                # Click date filter
-                page.click('button:has-text("Date Range")')
-                time.sleep(1)
-
-                if start_date:
-                    page.fill('input[name="startDate"]', start_date)
-
-                if end_date:
-                    page.fill('input[name="endDate"]', end_date)
-
-                # Apply filter
-                page.click('button:has-text("Apply")')
-                time.sleep(2)
-
-            # 2. Click download/export button
-            page.click('button:has-text("Download")')
+            # Select the checking account
+            print("Selecting checking account...")
+            page.select_option('#AcctNum', value='2044251052|TELEBANK')
             time.sleep(1)
 
-            # 3. Select CSV format
-            page.click('text=CSV')
+            # Set date range
+            # Convert from YYYY-MM-DD to MM/DD/YY format if provided
+            if start_date:
+                # Parse YYYY-MM-DD
+                date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+                formatted_start = date_obj.strftime('%m/%d/%y')
+            else:
+                # Default to 90 days ago
+                formatted_start = (datetime.now() - timedelta(days=90)).strftime('%m/%d/%y')
 
-            # 4. Wait for download to start
+            if end_date:
+                date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+                formatted_end = date_obj.strftime('%m/%d/%y')
+            else:
+                # Default to today
+                formatted_end = datetime.now().strftime('%m/%d/%y')
+
+            print(f"Setting date range: {formatted_start} to {formatted_end}")
+            page.fill('#FromDate', formatted_start)
+            page.fill('#ToDate', formatted_end)
+            time.sleep(1)
+
+            # Click download button and wait for file
+            print("Downloading CSV...")
             with page.expect_download() as download_info:
-                page.click('button:has-text("Export")')
+                page.click('button:has-text("Download")')
 
             download = download_info.value
 
-            # 5. Save the downloaded file
+            # Save the downloaded file
             timestamp = int(time.time())
             csv_filename = f"etrade_transactions_{timestamp}.csv"
             csv_path = self.download_dir / csv_filename
