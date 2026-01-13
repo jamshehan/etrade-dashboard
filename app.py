@@ -1,13 +1,21 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pathlib import Path
-import sqlite3
 import config
-from database import TransactionDatabase
 from csv_parser import import_csv_to_database
 from scraper import ETradeScraper
 from projections import calculate_projections
 import traceback
+
+# Use PostgreSQL if DATABASE_URL is set, otherwise SQLite
+if config.USE_POSTGRES:
+    from database_pg import TransactionDatabase
+    from psycopg2 import errors as db_errors
+    IntegrityError = db_errors.UniqueViolation
+else:
+    from database import TransactionDatabase
+    import sqlite3
+    IntegrityError = sqlite3.IntegrityError
 
 
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -365,7 +373,7 @@ def add_person_mapping():
             'message': 'Mapping added successfully'
         })
 
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return jsonify({
             'success': False,
             'error': 'This mapping already exists'
@@ -460,6 +468,9 @@ def get_contribution_statistics():
 
 if __name__ == '__main__':
     print(f"Starting eTrade Dashboard on http://localhost:{config.FLASK_PORT}")
-    print(f"Database: {config.DB_PATH}")
+    if config.USE_POSTGRES:
+        print(f"Database: PostgreSQL (via DATABASE_URL)")
+    else:
+        print(f"Database: SQLite ({config.DB_PATH})")
     print(f"Download directory: {config.DOWNLOAD_DIR}")
     app.run(debug=config.FLASK_DEBUG, port=config.FLASK_PORT, host='0.0.0.0')

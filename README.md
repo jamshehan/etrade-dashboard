@@ -17,10 +17,12 @@ A Python-based web application for automatically scraping, storing, and visualiz
 
 ## Tech Stack
 
-- **Backend**: Python, Flask, SQLite
-- **Web Scraping**: Playwright
+- **Backend**: Python, Flask
+- **Database**: PostgreSQL (production) / SQLite (local development)
+- **Web Scraping**: Playwright (local only)
 - **Data Processing**: Pandas
 - **Frontend**: Vanilla JavaScript, HTML, CSS
+- **Deployment**: Vercel (planned)
 
 ## Setup Instructions
 
@@ -102,18 +104,21 @@ The dashboard will be available at: `http://localhost:5000`
 ```
 etrade-dashboard/
 ├── app.py                 # Flask web application
-├── scraper.py            # eTrade web scraper
-├── database.py           # SQLite database management
-├── csv_parser.py         # CSV parsing logic
-├── projections.py        # Balance projection calculations
-├── config.py             # Configuration management
-├── cli.py                # Command-line interface
-├── requirements.txt      # Python dependencies
-├── .env                  # Environment variables (create from .env.example)
-├── data/                 # Data storage
-│   ├── downloads/        # Downloaded CSV files
-│   └── transactions.db   # SQLite database
-└── static/               # Frontend files
+├── scraper.py             # eTrade web scraper (local only)
+├── database.py            # SQLite database management (local dev)
+├── database_pg.py         # PostgreSQL database management (production)
+├── csv_parser.py          # CSV parsing logic
+├── projections.py         # Balance projection calculations
+├── config.py              # Configuration management
+├── cli.py                 # Command-line interface
+├── migration_export.py    # Export SQLite data to JSON
+├── migration_import.py    # Import JSON data to PostgreSQL
+├── requirements.txt       # Python dependencies
+├── .env                   # Environment variables (create from .env.example)
+├── data/                  # Data storage
+│   ├── downloads/         # Downloaded CSV files
+│   └── transactions.db    # SQLite database (local dev)
+└── static/                # Frontend files
     ├── index.html
     ├── style.css
     └── app.js

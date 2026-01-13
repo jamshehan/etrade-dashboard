@@ -1,6 +1,21 @@
-playwright==1.41.0
-pandas==2.2.0
+# Web framework
 flask==3.0.0
 flask-cors==4.0.0
-python-dotenv==1.0.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Authentication (JWT verification)
+pyjwt==2.8.0
+cryptography==41.0.7
+requests==2.31.0
+
+# Data processing
+pandas==2.2.0
 python-dateutil==2.8.2
+
+# Environment management
+python-dotenv==1.0.0
+
+# Web scraping (local development only, not for production)
+playwright==1.41.0
