@@ -758,7 +758,8 @@ function formatCurrency(amount) {
 
 function formatDate(dateString) {
     if (!dateString) return '-';
-    const date = new Date(dateString);
+    // Parse as local date by adding 'T00:00:00' to force local timezone
+    const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
