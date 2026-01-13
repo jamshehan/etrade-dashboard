@@ -92,10 +92,14 @@ class ETradeScraper:
             # Fill password
             page.fill('#password', self.password)
 
-            # Click login button
+            # Click login button and wait for navigation
+            print("Submitting credentials...")
             page.click('#mfaLogonButton')
 
-            print("Login credentials submitted")
+            # Wait for page to navigate away from login page
+            page.wait_for_url(lambda url: '/user/login' not in url, timeout=self.timeout)
+
+            print("Login credentials submitted, navigated to next page")
             time.sleep(2)
 
         except Exception as e:
@@ -106,17 +110,29 @@ class ETradeScraper:
         Handle MFA if required
         """
         print("Checking for MFA...")
-        time.sleep(3)
 
         try:
+            # Wait for page to fully load and all redirects to complete
+            print("Waiting for page to finish loading and redirects to complete...")
+            page.wait_for_load_state('networkidle', timeout=self.timeout)
+            time.sleep(1)
+
+            current_url = page.url
+            print(f"Current URL after load: {current_url}")
+
             # Check if we're on the send OTP page
-            if "sendotpcode" in page.url:
+            if "sendotpcode" in current_url:
                 print("MFA required - triggering SMS code...")
+
+                # Wait for the send OTP button to be visible
+                page.wait_for_selector('#sendOTPCodeBtn', timeout=self.timeout)
                 page.click('#sendOTPCodeBtn')
-                time.sleep(2)
+
+                print("SMS code requested, waiting for verification page...")
 
                 # Wait for verification code page
                 page.wait_for_url("**/verifyotpcode", timeout=self.timeout)
+                time.sleep(1)
 
                 print("\n" + "="*60)
                 print("MFA CODE REQUIRED")
@@ -129,12 +145,18 @@ class ETradeScraper:
 
                 # Wait for user to manually enter code and submit
                 # We'll wait until we're no longer on the verifyotpcode page
-                while "verifyotpcode" in page.url:
-                    time.sleep(1)
+                print("Waiting for MFA submission...")
+                try:
+                    page.wait_for_url(lambda url: "verifyotpcode" not in url, timeout=120000)  # 2 minutes
+                except Exception as e:
+                    print(f"Error waiting for URL change: {e}")
+                    print(f"Current URL: {page.url}")
+                    raise Exception("Timeout or error waiting for MFA submission")
 
                 print("MFA completed successfully")
-                time.sleep(2)
-            elif "verifyotpcode" in page.url:
+                time.sleep(3)
+
+            elif "verifyotpcode" in current_url:
                 # Already on verification page (shouldn't normally happen)
                 print("\n" + "="*60)
                 print("MFA CODE REQUIRED")
@@ -145,13 +167,19 @@ class ETradeScraper:
                 print("4. Click Submit")
                 print("="*60 + "\n")
 
-                while "verifyotpcode" in page.url:
-                    time.sleep(1)
+                print("Waiting for MFA submission...")
+                try:
+                    page.wait_for_url(lambda url: "verifyotpcode" not in url, timeout=120000)  # 2 minutes
+                except Exception as e:
+                    print(f"Error waiting for URL change: {e}")
+                    print(f"Current URL: {page.url}")
+                    raise Exception("Timeout or error waiting for MFA submission")
 
                 print("MFA completed successfully")
-                time.sleep(2)
+                time.sleep(3)
+
             else:
-                print("No MFA required - device already trusted")
+                print(f"No MFA required - device already trusted (URL: {current_url})")
 
         except Exception as e:
             raise Exception(f"MFA handling failed: {str(e)}")
