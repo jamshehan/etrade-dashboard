@@ -1,12 +1,26 @@
 import os
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Dict, Optional, Tuple
 from contextlib import contextmanager
+from decimal import Decimal
 import psycopg2
 from psycopg2 import pool, extras, errors
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def serialize_row(row: Dict) -> Dict:
+    """Convert PostgreSQL types to JSON-serializable types"""
+    result = {}
+    for key, value in row.items():
+        if isinstance(value, (datetime, date)):
+            result[key] = value.isoformat() if value else None
+        elif isinstance(value, Decimal):
+            result[key] = float(value)
+        else:
+            result[key] = value
+    return result
 
 
 class TransactionDatabase:
@@ -136,7 +150,7 @@ class TransactionDatabase:
                     VALUES (%s, %s, %s, %s)
                     RETURNING id, email, full_name, role, created_at
                 ''', (auth_provider_id, email, full_name, role))
-                user = dict(cursor.fetchone())
+                user = serialize_row(dict(cursor.fetchone()))
                 conn.commit()
                 return user
 
@@ -150,7 +164,7 @@ class TransactionDatabase:
                     WHERE auth_provider_id = %s
                 ''', (auth_provider_id,))
                 row = cursor.fetchone()
-                return dict(row) if row else None
+                return serialize_row(dict(row)) if row else None
 
     def get_user_by_email(self, email: str) -> Optional[Dict]:
         """Get user by email"""
@@ -162,7 +176,7 @@ class TransactionDatabase:
                     WHERE email = %s
                 ''', (email,))
                 row = cursor.fetchone()
-                return dict(row) if row else None
+                return serialize_row(dict(row)) if row else None
 
     def update_user_role(self, auth_provider_id: str, role: str) -> bool:
         """Update user role (admin/viewer)"""
@@ -202,7 +216,7 @@ class TransactionDatabase:
                     FROM users
                     ORDER BY created_at DESC
                 ''')
-                return [dict(row) for row in cursor.fetchall()]
+                return [serialize_row(dict(row)) for row in cursor.fetchall()]
 
     # ==================== Transaction Methods ====================
 
@@ -259,7 +273,7 @@ class TransactionDatabase:
                         ORDER BY transaction_date DESC
                     ''')
 
-                return [dict(row) for row in cursor.fetchall()]
+                return [serialize_row(dict(row)) for row in cursor.fetchall()]
 
     def get_transaction_count(self) -> int:
         """Get total number of transactions"""
@@ -312,7 +326,7 @@ class TransactionDatabase:
                 query += ' ORDER BY transaction_date DESC'
 
                 cursor.execute(query, params)
-                return [dict(row) for row in cursor.fetchall()]
+                return [serialize_row(dict(row)) for row in cursor.fetchall()]
 
     def get_statistics(self, start_date: str = None, end_date: str = None) -> Dict:
         """Calculate summary statistics"""
@@ -343,12 +357,7 @@ class TransactionDatabase:
                     WHERE {where_clause}
                 ''', params)
 
-                stats = dict(cursor.fetchone())
-
-                # Convert Decimal types to float for JSON serialization
-                for key in ['total_deposits', 'total_withdrawals', 'net_change', 'avg_transaction']:
-                    if stats.get(key) is not None:
-                        stats[key] = float(stats[key])
+                stats = serialize_row(dict(cursor.fetchone()))
 
                 # Deposits by source
                 cursor.execute(f'''
@@ -359,11 +368,7 @@ class TransactionDatabase:
                     ORDER BY total DESC
                 ''', params)
 
-                deposits_by_source = []
-                for row in cursor.fetchall():
-                    d = dict(row)
-                    d['total'] = float(d['total']) if d['total'] else 0
-                    deposits_by_source.append(d)
+                deposits_by_source = [serialize_row(dict(row)) for row in cursor.fetchall()]
                 stats['deposits_by_source'] = deposits_by_source
 
                 # Monthly breakdown - PostgreSQL uses TO_CHAR instead of strftime
@@ -379,13 +384,7 @@ class TransactionDatabase:
                     ORDER BY month DESC
                 ''', params)
 
-                monthly_breakdown = []
-                for row in cursor.fetchall():
-                    d = dict(row)
-                    d['deposits'] = float(d['deposits']) if d['deposits'] else 0
-                    d['withdrawals'] = float(d['withdrawals']) if d['withdrawals'] else 0
-                    d['net'] = float(d['net']) if d['net'] else 0
-                    monthly_breakdown.append(d)
+                monthly_breakdown = [serialize_row(dict(row)) for row in cursor.fetchall()]
                 stats['monthly_breakdown'] = monthly_breakdown
 
                 # Category breakdown
@@ -397,11 +396,7 @@ class TransactionDatabase:
                     ORDER BY total
                 ''', params)
 
-                by_category = []
-                for row in cursor.fetchall():
-                    d = dict(row)
-                    d['total'] = float(d['total']) if d['total'] else 0
-                    by_category.append(d)
+                by_category = [serialize_row(dict(row)) for row in cursor.fetchall()]
                 stats['by_category'] = by_category
 
                 return stats
@@ -423,14 +418,7 @@ class TransactionDatabase:
                     ORDER BY occurrences DESC
                 ''', (min_occurrences,))
 
-                results = []
-                for row in cursor.fetchall():
-                    d = dict(row)
-                    d['avg_amount'] = float(d['avg_amount']) if d['avg_amount'] else 0
-                    d['min_amount'] = float(d['min_amount']) if d['min_amount'] else 0
-                    d['max_amount'] = float(d['max_amount']) if d['max_amount'] else 0
-                    results.append(d)
-                return results
+                return [serialize_row(dict(row)) for row in cursor.fetchall()]
 
     def update_transaction(self, transaction_id: int, **kwargs) -> bool:
         """Update transaction fields"""
@@ -493,7 +481,7 @@ class TransactionDatabase:
                     FROM person_mappings
                     ORDER BY person_name, keyword
                 ''')
-                return [dict(row) for row in cursor.fetchall()]
+                return [serialize_row(dict(row)) for row in cursor.fetchall()]
 
     def add_person_mapping(self, person_name: str, keyword: str) -> bool:
         """
@@ -545,7 +533,7 @@ class TransactionDatabase:
                         t.balance,
                         pm.person_name
                     FROM transactions t
-                    INNER JOIN person_mappings pm ON t.description ILIKE '%' || pm.keyword || '%'
+                    INNER JOIN person_mappings pm ON t.description ILIKE '%%' || pm.keyword || '%%'
                     WHERE t.amount > 0
                 '''
                 params = []
@@ -567,12 +555,7 @@ class TransactionDatabase:
                 '''
 
                 cursor.execute(query, params)
-                results = []
-                for row in cursor.fetchall():
-                    d = dict(row)
-                    d['amount'] = float(d['amount']) if d['amount'] else 0
-                    d['balance'] = float(d['balance']) if d['balance'] else None
-                    results.append(d)
+                results = [serialize_row(dict(row)) for row in cursor.fetchall()]
 
                 # Sort by date descending (after DISTINCT ON)
                 results.sort(key=lambda x: x['transaction_date'], reverse=True)
@@ -604,17 +587,13 @@ class TransactionDatabase:
                         SUM(t.amount) as total,
                         COUNT(DISTINCT t.id) as count
                     FROM transactions t
-                    INNER JOIN person_mappings pm ON t.description ILIKE '%' || pm.keyword || '%'
+                    INNER JOIN person_mappings pm ON t.description ILIKE '%%' || pm.keyword || '%%'
                     WHERE t.amount > 0 AND {where_clause}
                     GROUP BY pm.person_name
                     ORDER BY total DESC
                 ''', params)
 
-                by_person = []
-                for row in cursor.fetchall():
-                    d = dict(row)
-                    d['total'] = float(d['total']) if d['total'] else 0
-                    by_person.append(d)
+                by_person = [serialize_row(dict(row)) for row in cursor.fetchall()]
 
                 # Monthly by person - PostgreSQL uses TO_CHAR
                 cursor.execute(f'''
@@ -623,17 +602,13 @@ class TransactionDatabase:
                         pm.person_name,
                         SUM(t.amount) as total
                     FROM transactions t
-                    INNER JOIN person_mappings pm ON t.description ILIKE '%' || pm.keyword || '%'
+                    INNER JOIN person_mappings pm ON t.description ILIKE '%%' || pm.keyword || '%%'
                     WHERE t.amount > 0 AND {where_clause}
                     GROUP BY TO_CHAR(t.transaction_date, 'YYYY-MM'), pm.person_name
                     ORDER BY month DESC, pm.person_name
                 ''', params)
 
-                monthly_by_person = []
-                for row in cursor.fetchall():
-                    d = dict(row)
-                    d['total'] = float(d['total']) if d['total'] else 0
-                    monthly_by_person.append(d)
+                monthly_by_person = [serialize_row(dict(row)) for row in cursor.fetchall()]
 
                 return {
                     'by_person': by_person,

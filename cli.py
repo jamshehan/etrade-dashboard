@@ -97,7 +97,10 @@ def cmd_stats(args):
 def cmd_serve(args):
     """Start the web server"""
     print(f"Starting eTrade Dashboard on http://localhost:{config.FLASK_PORT}")
-    print(f"Database: {config.DB_PATH}")
+    if config.USE_POSTGRES:
+        print(f"Database: PostgreSQL (via DATABASE_URL)")
+    else:
+        print(f"Database: SQLite ({config.DB_PATH})")
     print(f"Download directory: {config.DOWNLOAD_DIR}")
     print("\nPress Ctrl+C to stop\n")
 

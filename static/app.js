@@ -48,9 +48,15 @@ async function initializeAuth() {
 
     } catch (error) {
         console.error('Auth initialization failed:', error);
-        // Fall back to showing app without auth
-        showMainApp();
-        initializeApp();
+        // Show error to user instead of falling back
+        document.getElementById('authLoading').style.display = 'none';
+        document.getElementById('signInScreen').style.display = 'flex';
+        const signInDiv = document.getElementById('clerkSignIn');
+        signInDiv.innerHTML = `<div style="color: red; padding: 20px;">
+            <h3>Authentication Error</h3>
+            <p>Failed to initialize authentication system.</p>
+            <p>Error: ${error.message}</p>
+        </div>`;
     }
 }
 
@@ -60,12 +66,21 @@ async function loadClerkSDK(publishableKey) {
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
         script.crossOrigin = 'anonymous';
+        script.setAttribute('data-clerk-publishable-key', publishableKey);
 
         script.onload = async () => {
             try {
-                // Initialize Clerk
-                clerk = new window.Clerk(publishableKey);
-                await clerk.load();
+                // Wait for Clerk to be available
+                clerk = window.Clerk;
+
+                if (!clerk) {
+                    throw new Error('Clerk SDK not available');
+                }
+
+                // Load Clerk (newer API doesn't require 'new')
+                if (typeof clerk.load === 'function') {
+                    await clerk.load();
+                }
 
                 // Check if user is signed in
                 if (clerk.user) {
@@ -307,7 +322,8 @@ async function apiCall(endpoint, options = {}) {
 
         // Handle auth errors
         if (response.status === 401) {
-            if (authEnabled) {
+            if (authEnabled && clerk && clerk.user) {
+                // Only redirect to sign-in if we thought we were authenticated
                 handleSignedOut();
             }
             throw new Error(data.error || 'Unauthorized');
@@ -324,7 +340,10 @@ async function apiCall(endpoint, options = {}) {
         return data;
     } catch (error) {
         console.error('API Error:', error);
-        alert(`Error: ${error.message}`);
+        // Only show alerts for non-auth errors or if we're already authenticated
+        if (error.message !== 'Unauthorized' || (clerk && clerk.user)) {
+            alert(`Error: ${error.message}`);
+        }
         throw error;
     }
 }
