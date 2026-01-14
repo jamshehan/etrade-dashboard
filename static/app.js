@@ -1,18 +1,203 @@
-const API_BASE = 'http://localhost:5000/api';
+// API configuration - use relative URLs for production, absolute for dev
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:5000/api' : '/api';
 
 // State
 let currentPage = 1;
 const pageSize = 50;
 let currentFilters = {};
 
+// Auth state
+let authToken = null;
+let currentUser = null;
+let authEnabled = false;
+let clerk = null;
+
 // Initialize app
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initializeAuth();
+});
+
+// Initialize authentication
+async function initializeAuth() {
+    try {
+        // Check if auth is enabled by fetching config
+        const configResponse = await fetch(`${API_BASE}/auth/config`);
+        const config = await configResponse.json();
+
+        authEnabled = config.data.auth_enabled;
+
+        if (!authEnabled) {
+            // Auth disabled - show app directly (dev mode)
+            console.log('Auth disabled - running in dev mode');
+            showMainApp();
+            initializeApp();
+            return;
+        }
+
+        // Auth enabled - load Clerk
+        const publishableKey = config.data.clerk_publishable_key;
+        if (!publishableKey) {
+            console.error('Clerk publishable key not configured');
+            showMainApp();
+            initializeApp();
+            return;
+        }
+
+        // Dynamically load Clerk SDK
+        await loadClerkSDK(publishableKey);
+
+    } catch (error) {
+        console.error('Auth initialization failed:', error);
+        // Fall back to showing app without auth
+        showMainApp();
+        initializeApp();
+    }
+}
+
+// Load Clerk SDK dynamically
+async function loadClerkSDK(publishableKey) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
+        script.crossOrigin = 'anonymous';
+
+        script.onload = async () => {
+            try {
+                // Initialize Clerk
+                clerk = new window.Clerk(publishableKey);
+                await clerk.load();
+
+                // Check if user is signed in
+                if (clerk.user) {
+                    await handleSignedIn();
+                } else {
+                    showSignInScreen();
+                }
+
+                // Listen for auth state changes
+                clerk.addListener((event) => {
+                    if (event.user) {
+                        handleSignedIn();
+                    } else {
+                        handleSignedOut();
+                    }
+                });
+
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        script.onerror = () => reject(new Error('Failed to load Clerk SDK'));
+        document.head.appendChild(script);
+    });
+}
+
+// Handle signed in state
+async function handleSignedIn() {
+    try {
+        // Get session token
+        const session = clerk.session;
+        if (session) {
+            authToken = await session.getToken();
+        }
+
+        // Fetch user info from our backend
+        const response = await apiCall('/user/me');
+        currentUser = response.data;
+
+        // Update UI with user info
+        updateUserDisplay();
+
+        // Show main app
+        showMainApp();
+        initializeApp();
+
+    } catch (error) {
+        console.error('Failed to handle sign in:', error);
+        // If we can't get user info, sign out
+        if (clerk) {
+            await clerk.signOut();
+        }
+        showSignInScreen();
+    }
+}
+
+// Handle signed out state
+function handleSignedOut() {
+    authToken = null;
+    currentUser = null;
+    showSignInScreen();
+}
+
+// Show sign-in screen
+function showSignInScreen() {
+    document.getElementById('authLoading').style.display = 'none';
+    document.getElementById('signInScreen').style.display = 'flex';
+    document.getElementById('mainApp').style.display = 'none';
+
+    // Mount Clerk sign-in component
+    if (clerk) {
+        const signInDiv = document.getElementById('clerkSignIn');
+        signInDiv.innerHTML = ''; // Clear any existing content
+        clerk.mountSignIn(signInDiv);
+    }
+}
+
+// Show main app
+function showMainApp() {
+    document.getElementById('authLoading').style.display = 'none';
+    document.getElementById('signInScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+}
+
+// Update user display in header
+function updateUserDisplay() {
+    if (!currentUser) return;
+
+    const emailEl = document.getElementById('userEmail');
+    const roleEl = document.getElementById('userRole');
+
+    if (emailEl) {
+        emailEl.textContent = currentUser.email || '';
+    }
+
+    if (roleEl) {
+        roleEl.textContent = currentUser.role === 'admin' ? 'Admin' : 'Viewer';
+        roleEl.className = `user-role ${currentUser.role}`;
+    }
+
+    // Show/hide admin elements based on role
+    updateAdminElements();
+}
+
+// Show/hide admin-only elements
+function updateAdminElements() {
+    const isAdmin = currentUser && currentUser.role === 'admin';
+    const adminElements = document.querySelectorAll('.admin-only');
+
+    adminElements.forEach(el => {
+        el.style.display = isAdmin ? '' : 'none';
+    });
+}
+
+// Sign out handler
+async function signOut() {
+    if (clerk) {
+        await clerk.signOut();
+    }
+    handleSignedOut();
+}
+
+// Initialize the app after auth
+function initializeApp() {
     initializeTabs();
     initializeButtons();
     loadTransactions();
     loadCategories();
     loadSources();
-});
+}
 
 // Tab navigation
 function initializeTabs() {
@@ -50,6 +235,12 @@ function initializeButtons() {
     document.getElementById('importCsvBtn').addEventListener('click', () => openModal('importModal'));
     document.getElementById('scrapBtn').addEventListener('click', () => openModal('scrapeModal'));
 
+    // Sign out button
+    const signOutBtn = document.getElementById('signOutBtn');
+    if (signOutBtn) {
+        signOutBtn.addEventListener('click', signOut);
+    }
+
     // Import modal
     document.getElementById('confirmImportBtn').addEventListener('click', importCsv);
     document.getElementById('cancelImportBtn').addEventListener('click', () => closeModal('importModal'));
@@ -73,7 +264,10 @@ function initializeButtons() {
     document.getElementById('calculateProjectionBtn').addEventListener('click', calculateProjection);
 
     // Contributions
-    document.getElementById('addMappingBtn').addEventListener('click', addPersonMapping);
+    const addMappingBtn = document.getElementById('addMappingBtn');
+    if (addMappingBtn) {
+        addMappingBtn.addEventListener('click', addPersonMapping);
+    }
     document.getElementById('filterContributionsBtn').addEventListener('click', filterContributions);
     document.getElementById('clearContribFiltersBtn').addEventListener('click', clearContributionFilters);
 }
@@ -87,11 +281,41 @@ function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('active');
 }
 
-// API calls
+// API calls with auth token
 async function apiCall(endpoint, options = {}) {
     try {
-        const response = await fetch(`${API_BASE}${endpoint}`, options);
+        // Refresh token if using Clerk
+        if (clerk && clerk.session) {
+            authToken = await clerk.session.getToken();
+        }
+
+        // Add auth header if we have a token
+        const headers = {
+            ...options.headers
+        };
+
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+        }
+
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+            ...options,
+            headers
+        });
+
         const data = await response.json();
+
+        // Handle auth errors
+        if (response.status === 401) {
+            if (authEnabled) {
+                handleSignedOut();
+            }
+            throw new Error(data.error || 'Unauthorized');
+        }
+
+        if (response.status === 403) {
+            throw new Error(data.error || 'Access denied - admin privileges required');
+        }
 
         if (!data.success) {
             throw new Error(data.error || 'API call failed');
@@ -535,6 +759,7 @@ async function loadPersonMappings() {
 
 function displayPersonMappings(mappings) {
     const tbody = document.getElementById('mappingsTableBody');
+    const isAdmin = currentUser && currentUser.role === 'admin';
 
     if (!mappings || mappings.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="loading">No person mappings found. Add one above to get started.</td></tr>';
@@ -547,7 +772,7 @@ function displayPersonMappings(mappings) {
             <td>${mapping.keyword}</td>
             <td>${formatDate(mapping.created_at)}</td>
             <td>
-                <button class="btn btn-small" onclick="deletePersonMapping(${mapping.id})">Delete</button>
+                ${isAdmin ? `<button class="btn btn-small" onclick="deletePersonMapping(${mapping.id})">Delete</button>` : '-'}
             </td>
         </tr>
     `).join('');
@@ -585,7 +810,6 @@ async function addPersonMapping() {
         alert('Mapping added successfully!');
     } catch (error) {
         console.error('Failed to add mapping:', error);
-        alert(`Error: ${error.message}`);
     }
 }
 
@@ -606,7 +830,6 @@ async function deletePersonMapping(mappingId) {
         populatePersonFilter();
     } catch (error) {
         console.error('Failed to delete mapping:', error);
-        alert(`Error: ${error.message}`);
     }
 }
 

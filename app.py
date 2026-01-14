@@ -1,11 +1,14 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, g
 from flask_cors import CORS
 from pathlib import Path
 import config
 from csv_parser import import_csv_to_database
 from scraper import ETradeScraper
 from projections import calculate_projections
+from auth_middleware import require_auth, require_admin
 import traceback
+import hmac
+import hashlib
 
 # Use PostgreSQL if DATABASE_URL is set, otherwise SQLite
 if config.USE_POSTGRES:
@@ -19,6 +22,7 @@ else:
 
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+app.config['SECRET_KEY'] = config.FLASK_SECRET_KEY
 CORS(app)
 
 # Initialize database
@@ -32,6 +36,7 @@ def index():
 
 
 @app.route('/api/transactions', methods=['GET'])
+@require_auth
 def get_transactions():
     """
     Get all transactions with optional pagination
@@ -57,6 +62,7 @@ def get_transactions():
 
 
 @app.route('/api/transactions/search', methods=['GET'])
+@require_auth
 def search_transactions():
     """
     Search transactions with filters
@@ -95,6 +101,7 @@ def search_transactions():
 
 
 @app.route('/api/statistics', methods=['GET'])
+@require_auth
 def get_statistics():
     """
     Get summary statistics
@@ -119,6 +126,7 @@ def get_statistics():
 
 
 @app.route('/api/recurring', methods=['GET'])
+@require_auth
 def get_recurring():
     """
     Get recurring transactions
@@ -142,6 +150,7 @@ def get_recurring():
 
 
 @app.route('/api/projections', methods=['POST'])
+@require_auth
 def get_projections():
     """
     Calculate future balance projections
@@ -186,6 +195,7 @@ def get_projections():
 
 
 @app.route('/api/transactions/<int:transaction_id>', methods=['PATCH'])
+@require_admin
 def update_transaction(transaction_id):
     """
     Update transaction fields
@@ -215,6 +225,7 @@ def update_transaction(transaction_id):
 
 
 @app.route('/api/import/csv', methods=['POST'])
+@require_admin
 def import_csv():
     """
     Import CSV file from specified path
@@ -255,6 +266,7 @@ def import_csv():
 
 
 @app.route('/api/scrape', methods=['POST'])
+@require_admin
 def scrape_transactions():
     """
     Trigger web scraper to download transactions
@@ -290,6 +302,7 @@ def scrape_transactions():
 
 
 @app.route('/api/categories', methods=['GET'])
+@require_auth
 def get_categories():
     """Get list of all unique categories"""
     try:
@@ -309,6 +322,7 @@ def get_categories():
 
 
 @app.route('/api/sources', methods=['GET'])
+@require_auth
 def get_sources():
     """Get list of all unique sources"""
     try:
@@ -330,6 +344,7 @@ def get_sources():
 # Person Mappings and Contributions Endpoints
 
 @app.route('/api/person-mappings', methods=['GET'])
+@require_auth
 def get_person_mappings():
     """Get all person-keyword mappings"""
     try:
@@ -348,6 +363,7 @@ def get_person_mappings():
 
 
 @app.route('/api/person-mappings', methods=['POST'])
+@require_admin
 def add_person_mapping():
     """Add new person-keyword mapping"""
     try:
@@ -386,6 +402,7 @@ def add_person_mapping():
 
 
 @app.route('/api/person-mappings/<int:mapping_id>', methods=['DELETE'])
+@require_admin
 def delete_person_mapping(mapping_id):
     """Delete person-keyword mapping by ID"""
     try:
@@ -410,6 +427,7 @@ def delete_person_mapping(mapping_id):
 
 
 @app.route('/api/contributions', methods=['GET'])
+@require_auth
 def get_contributions():
     """
     Get contribution transactions with optional filters
@@ -440,6 +458,7 @@ def get_contributions():
 
 
 @app.route('/api/contributions/statistics', methods=['GET'])
+@require_auth
 def get_contribution_statistics():
     """
     Get contribution statistics aggregated by person
@@ -466,6 +485,218 @@ def get_contribution_statistics():
         }), 500
 
 
+# Authentication Endpoints
+
+@app.route('/api/auth/config', methods=['GET'])
+def get_auth_config():
+    """
+    Get public authentication configuration for frontend.
+    Returns Clerk publishable key if configured.
+    """
+    return jsonify({
+        'success': True,
+        'data': {
+            'clerk_publishable_key': config.CLERK_PUBLISHABLE_KEY or None,
+            'auth_enabled': bool(config.CLERK_PUBLISHABLE_KEY)
+        }
+    })
+
+
+@app.route('/api/user/me', methods=['GET'])
+@require_auth
+def get_current_user():
+    """
+    Get current authenticated user's info including role.
+    """
+    try:
+        user_id = g.current_user.get('sub')
+
+        # Get user from database
+        user = db.get_user_by_auth_id(user_id)
+
+        if not user:
+            # User authenticated but not in database yet
+            # This can happen if webhook hasn't fired yet
+            return jsonify({
+                'success': True,
+                'data': {
+                    'auth_id': user_id,
+                    'email': g.current_user.get('email'),
+                    'role': 'viewer',  # Default role
+                    'in_database': False
+                }
+            })
+
+        # Update last login
+        db.update_user_last_login(user_id)
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'id': user['id'],
+                'email': user['email'],
+                'full_name': user['full_name'],
+                'role': user['role'],
+                'created_at': str(user['created_at']) if user.get('created_at') else None,
+                'last_login': str(user['last_login']) if user.get('last_login') else None,
+                'in_database': True
+            }
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/webhooks/clerk', methods=['POST'])
+def clerk_webhook():
+    """
+    Handle Clerk webhook events for user lifecycle management.
+    Creates user in database when they sign up via Clerk.
+    """
+    try:
+        # Get the webhook payload
+        payload = request.get_json()
+
+        if not payload:
+            return jsonify({'success': False, 'error': 'No payload'}), 400
+
+        event_type = payload.get('type')
+        data = payload.get('data', {})
+
+        if event_type == 'user.created':
+            # Extract user info from Clerk webhook
+            auth_id = data.get('id')
+            email_addresses = data.get('email_addresses', [])
+            email = email_addresses[0].get('email_address') if email_addresses else None
+            first_name = data.get('first_name', '')
+            last_name = data.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip() or None
+
+            if not auth_id or not email:
+                return jsonify({
+                    'success': False,
+                    'error': 'Missing required user data'
+                }), 400
+
+            # Check if user already exists
+            existing_user = db.get_user_by_auth_id(auth_id)
+            if existing_user:
+                return jsonify({
+                    'success': True,
+                    'message': 'User already exists'
+                })
+
+            # Create user with viewer role by default
+            user = db.create_user(
+                auth_provider_id=auth_id,
+                email=email,
+                full_name=full_name,
+                role='viewer'
+            )
+
+            print(f"Created new user: {email} (role: viewer)")
+
+            return jsonify({
+                'success': True,
+                'message': 'User created',
+                'user_id': user['id']
+            })
+
+        elif event_type == 'user.updated':
+            # Update user info if needed
+            auth_id = data.get('id')
+            if auth_id:
+                # Could update email/name here if needed
+                pass
+
+            return jsonify({'success': True, 'message': 'User update noted'})
+
+        elif event_type == 'user.deleted':
+            # Could handle user deletion here
+            # For now, we'll keep the user record for audit purposes
+            return jsonify({'success': True, 'message': 'User deletion noted'})
+
+        else:
+            # Unknown event type, just acknowledge
+            return jsonify({'success': True, 'message': f'Event {event_type} received'})
+
+    except Exception as e:
+        print(f"Webhook error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/users', methods=['GET'])
+@require_admin
+def get_all_users():
+    """
+    Get all users (admin only).
+    Used for user management.
+    """
+    try:
+        users = db.get_all_users()
+
+        return jsonify({
+            'success': True,
+            'data': users,
+            'count': len(users)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/users/<auth_id>/role', methods=['PATCH'])
+@require_admin
+def update_user_role(auth_id):
+    """
+    Update user role (admin only).
+    Body: { role: 'admin' | 'viewer' }
+    """
+    try:
+        data = request.get_json()
+
+        if not data or 'role' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'role is required'
+            }), 400
+
+        role = data['role']
+        if role not in ('admin', 'viewer'):
+            return jsonify({
+                'success': False,
+                'error': "role must be 'admin' or 'viewer'"
+            }), 400
+
+        updated = db.update_user_role(auth_id, role)
+
+        if not updated:
+            return jsonify({
+                'success': False,
+                'error': 'User not found'
+            }), 404
+
+        return jsonify({
+            'success': True,
+            'message': f'User role updated to {role}'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
     print(f"Starting eTrade Dashboard on http://localhost:{config.FLASK_PORT}")
     if config.USE_POSTGRES:
@@ -473,4 +704,5 @@ if __name__ == '__main__':
     else:
         print(f"Database: SQLite ({config.DB_PATH})")
     print(f"Download directory: {config.DOWNLOAD_DIR}")
+    print(f"Auth: {'Clerk enabled' if config.CLERK_PUBLISHABLE_KEY else 'Disabled (dev mode)'}")
     app.run(debug=config.FLASK_DEBUG, port=config.FLASK_PORT, host='0.0.0.0')

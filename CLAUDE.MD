@@ -23,6 +23,8 @@ This document provides context about the eTrade Transaction Dashboard project fo
 
 1. **app.py** - Flask web server
    - RESTful API endpoints for transactions, statistics, and projections
+   - Authentication endpoints (/api/auth/config, /api/user/me, /api/webhooks/clerk)
+   - User management endpoints (/api/users, /api/users/<auth_id>/role)
    - Auto-detects PostgreSQL vs SQLite based on DATABASE_URL env var
    - Serves static frontend files
    - Handles CORS and error responses
@@ -66,13 +68,20 @@ This document provides context about the eTrade Transaction Dashboard project fo
    - Loads environment variables from .env
    - Auto-detects database type (USE_POSTGRES flag)
    - Defines data directories and paths
-   - Clerk authentication configuration (for production)
+   - Clerk authentication configuration
 
-9. **migration_export.py** - SQLite to JSON export script
-   - Exports transactions and person_mappings to JSON
-   - Used for migrating local data to production PostgreSQL
+9. **auth_middleware.py** - Authentication middleware
+   - Clerk JWT verification using JWKS
+   - `@require_auth` decorator for protected endpoints
+   - `@require_admin` decorator for admin-only endpoints
+   - Dev mode bypass when FLASK_DEBUG=true and Clerk not configured
+   - Token extraction from Authorization Bearer header
 
-10. **migration_import.py** - JSON to PostgreSQL import script
+10. **migration_export.py** - SQLite to JSON export script
+    - Exports transactions and person_mappings to JSON
+    - Used for migrating local data to production PostgreSQL
+
+11. **migration_import.py** - JSON to PostgreSQL import script
     - Imports JSON data to PostgreSQL
     - Validates data before import (--dry-run mode)
     - Handles duplicates gracefully
@@ -110,13 +119,23 @@ This document provides context about the eTrade Transaction Dashboard project fo
 ### Frontend Structure
 
 **static/** directory:
-- `index.html` - Single-page app with tab-based navigation
-- `style.css` - Responsive styling, dark header, table formatting
-- `app.js` - JavaScript for API calls, DOM manipulation, tab switching
+- `index.html` - Single-page app with auth screens and tab-based navigation
+- `style.css` - Responsive styling, auth screens, user menu, admin-only elements
+- `app.js` - Clerk SDK integration, auth state management, API calls with JWT
+
+**Auth Flow**:
+1. **Loading Screen** - Shows while checking auth state
+2. **Sign-In Screen** - Clerk sign-in component for unauthenticated users
+3. **Main App** - Dashboard with user menu showing email, role, sign-out button
+
+**Role-Based UI**:
+- Admin users see: Import CSV, Scrape eTrade buttons, delete buttons on mappings
+- Viewer users see: Read-only access to all data
+- Elements with `.admin-only` class hidden for non-admin users
 
 **Tabs**:
-1. **Statistics** - Total deposits/withdrawals, deposits by source, monthly breakdown
-2. **Transactions** - Searchable, filterable transaction list with pagination
+1. **Transactions** - Searchable, filterable transaction list with pagination
+2. **Statistics** - Total deposits/withdrawals, deposits by source, monthly breakdown
 3. **Contributions** - Person-to-keyword mapping for tracking contributions
 4. **Projections** - Balance forecasting tool with recurring transaction management
 
@@ -153,9 +172,13 @@ This document provides context about the eTrade Transaction Dashboard project fo
 - Vanilla JS fetch API for backend communication
 - Responsive tables with pagination
 
-### 6. Security (Current State)
+### 6. Authentication & Security
+- **Clerk Integration**: JWT-based authentication with JWKS verification
+- **Role-Based Access Control**: Admin and viewer roles
+- **Protected Endpoints**: All API endpoints require valid JWT (except /api/auth/config)
+- **Admin-Only Actions**: CSV import, scraping, user management, mapping deletion
+- **Dev Mode Bypass**: Auth skipped when FLASK_DEBUG=true and Clerk not configured
 - Credentials stored in .env file (gitignored)
-- No authentication on web interface yet (Phase 2: Clerk integration planned)
 - Database stored locally in data/ directory (SQLite) or cloud (PostgreSQL)
 
 ## Development History
@@ -188,11 +211,19 @@ This document provides context about the eTrade Transaction Dashboard project fo
    - Updated config.py with PostgreSQL and Clerk settings
    - Added psycopg2, pyjwt, cryptography dependencies
 
+5. **Clerk Authentication** (Phase 2 - Production Prep)
+   - Created auth_middleware.py with JWT verification and decorators
+   - Added @require_auth to all API endpoints
+   - Added @require_admin for sensitive operations (import, scrape, user mgmt)
+   - New endpoints: /api/auth/config, /api/user/me, /api/webhooks/clerk, /api/users
+   - Frontend Clerk SDK integration with dynamic loading
+   - Auth screens (loading, sign-in) and user menu in header
+   - Role-based UI hiding admin-only elements for viewers
+   - CSS styles for auth screens and user menu
+
 ### Planned Features (Production Deployment)
-- **Phase 2**: Clerk authentication integration
-- **Phase 3**: Role-based access control (admin/viewer)
-- **Phase 4**: Vercel deployment configuration
-- **Phase 5**: Frontend auth UI updates
+- **Phase 3**: Vercel deployment configuration
+- **Phase 4**: Production testing and webhook setup
 
 ## Configuration
 
@@ -354,11 +385,16 @@ playwright==1.41.0
   - Migration scripts
   - Dual database support in app.py
 
+- [x] Phase 2: Clerk authentication
+  - auth_middleware.py with JWT verification
+  - Protected API endpoints with @require_auth
+  - Admin-only endpoints with @require_admin
+  - Frontend Clerk SDK integration
+  - Auth screens and role-based UI
+
 ### In Progress
-- [ ] Phase 2: Clerk authentication
-- [ ] Phase 3: Role-based access control
-- [ ] Phase 4: Vercel deployment
-- [ ] Phase 5: Frontend auth integration
+- [ ] Phase 3: Vercel deployment configuration
+- [ ] Phase 4: Production testing and webhook setup
 
 ---
 

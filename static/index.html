@@ -7,13 +7,36 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
+    <!-- Auth Loading Screen -->
+    <div id="authLoading" class="auth-loading">
+        <div class="auth-loading-content">
+            <h2>eTrade Dashboard</h2>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Sign In Screen -->
+    <div id="signInScreen" class="sign-in-screen" style="display: none;">
+        <div class="sign-in-content">
+            <h1>eTrade Transaction Dashboard</h1>
+            <p>Sign in to access your dashboard</p>
+            <div id="clerkSignIn"></div>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="mainApp" class="container" style="display: none;">
         <header>
             <h1>eTrade Transaction Dashboard</h1>
             <div class="header-actions">
-                <button id="importCsvBtn" class="btn btn-primary">Import CSV</button>
-                <button id="scrapBtn" class="btn btn-success">Scrape eTrade</button>
+                <button id="importCsvBtn" class="btn btn-primary admin-only">Import CSV</button>
+                <button id="scrapBtn" class="btn btn-success admin-only">Scrape eTrade</button>
                 <button id="refreshBtn" class="btn">Refresh</button>
+                <div id="userMenu" class="user-menu">
+                    <span id="userEmail" class="user-email"></span>
+                    <span id="userRole" class="user-role"></span>
+                    <button id="signOutBtn" class="btn btn-small">Sign Out</button>
+                </div>
             </div>
         </header>
 
@@ -183,7 +206,7 @@
                 <h2>Manage Person Mappings</h2>
                 <p>Map keywords in transaction descriptions to person names to track contributions.</p>
 
-                <div class="filters" style="margin-bottom: 15px;">
+                <div class="filters admin-only" style="margin-bottom: 15px;">
                     <input type="text" id="mappingPersonName" placeholder="Person Name (e.g., Joe Santamour)">
                     <input type="text" id="mappingKeyword" placeholder="Keyword (e.g., JOSEPH SANTAMOU)">
                     <button id="addMappingBtn" class="btn btn-primary">Add Mapping</button>
@@ -310,6 +333,7 @@
             </div>
             <div id="scrapeStatus" class="status-message"></div>
         </div>
+    </div>
     </div>
 
     <script src="app.js"></script>
