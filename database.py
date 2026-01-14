@@ -36,7 +36,7 @@ class TransactionDatabase:
                 notes TEXT,
                 csv_hash TEXT,
                 imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(transaction_date, description, amount, csv_hash)
+                UNIQUE(transaction_date, description, amount)
             )
         ''')
 
