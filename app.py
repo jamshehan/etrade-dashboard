@@ -6,9 +6,13 @@ from csv_parser import import_csv_to_database
 from scraper import ETradeScraper
 from projections import calculate_projections
 from auth_middleware import require_auth, require_admin
+from logging_config import get_logger
 import traceback
 import hmac
 import hashlib
+
+# Initialize logger
+logger = get_logger('api')
 
 # Use PostgreSQL if DATABASE_URL is set, otherwise SQLite
 if config.USE_POSTGRES:
@@ -28,6 +32,66 @@ CORS(app)
 # Initialize database
 db = TransactionDatabase()
 
+
+# =============================================================================
+# Centralized Error Handlers
+# =============================================================================
+
+def error_response(message: str, status_code: int, details: dict = None):
+    """Create standardized error response."""
+    response = {
+        'success': False,
+        'error': message
+    }
+    if config.FLASK_DEBUG and details:
+        response['details'] = details
+    return jsonify(response), status_code
+
+
+@app.errorhandler(400)
+def bad_request_error(error):
+    logger.warning(f"Bad request: {error}")
+    return error_response('Bad request', 400)
+
+
+@app.errorhandler(401)
+def unauthorized_error(error):
+    logger.warning("Unauthorized access attempt")
+    return error_response('Authentication required', 401)
+
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    logger.warning("Forbidden access attempt")
+    return error_response('Access denied', 403)
+
+
+@app.errorhandler(404)
+def not_found_error(error):
+    logger.info(f"Resource not found: {request.path}")
+    return error_response('Resource not found', 404)
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    logger.error(f"Internal server error: {error}", exc_info=True)
+    return error_response('Internal server error', 500)
+
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    """Catch-all handler for unhandled exceptions."""
+    logger.error(f"Unhandled exception: {type(error).__name__}: {error}", exc_info=config.FLASK_DEBUG)
+
+    if config.FLASK_DEBUG:
+        return error_response(str(error), 500, {'type': type(error).__name__})
+    else:
+        return error_response('An unexpected error occurred', 500)
+
+
+# =============================================================================
+# Routes
+# =============================================================================
 
 @app.route('/')
 def index():
@@ -597,7 +661,7 @@ def clerk_webhook():
                 role='viewer'
             )
 
-            print(f"Created new user: {email} (role: viewer)")
+            logger.info(f"Created new user: {email} (role: viewer)")
 
             return jsonify({
                 'success': True,
@@ -624,7 +688,7 @@ def clerk_webhook():
             return jsonify({'success': True, 'message': f'Event {event_type} received'})
 
     except Exception as e:
-        print(f"Webhook error: {str(e)}")
+        logger.error(f"Webhook error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

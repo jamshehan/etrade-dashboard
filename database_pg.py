@@ -6,8 +6,12 @@ from decimal import Decimal
 import psycopg2
 from psycopg2 import pool, extras, errors
 from dotenv import load_dotenv
+from logging_config import get_logger
 
 load_dotenv()
+
+# Initialize logger
+logger = get_logger('db')
 
 
 def serialize_row(row: Dict) -> Dict:
@@ -38,11 +42,17 @@ class TransactionDatabase:
     def _init_pool(self):
         """Initialize connection pool (singleton for serverless)"""
         if TransactionDatabase._pool is None:
-            TransactionDatabase._pool = pool.SimpleConnectionPool(
-                minconn=1,
-                maxconn=10,
-                dsn=self.database_url
-            )
+            logger.info("Initializing PostgreSQL connection pool")
+            try:
+                TransactionDatabase._pool = pool.SimpleConnectionPool(
+                    minconn=1,
+                    maxconn=10,
+                    dsn=self.database_url
+                )
+                logger.info("PostgreSQL connection pool initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize connection pool: {e}")
+                raise
 
     @contextmanager
     def get_connection(self):
@@ -52,6 +62,9 @@ class TransactionDatabase:
             conn = TransactionDatabase._pool.getconn()
             conn.autocommit = False
             yield conn
+        except Exception as e:
+            logger.error(f"Database connection error: {e}")
+            raise
         finally:
             if conn:
                 TransactionDatabase._pool.putconn(conn)

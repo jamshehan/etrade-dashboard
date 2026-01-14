@@ -3,6 +3,10 @@ import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict
+from logging_config import get_logger
+
+# Initialize logger
+logger = get_logger('csv_parser')
 
 
 class ETradeCSVParser:
@@ -127,7 +131,7 @@ class ETradeCSVParser:
                 transactions.append(transaction)
 
             except Exception as e:
-                print(f"Warning: Skipping row due to error: {str(e)}")
+                logger.warning(f"Skipping row due to error: {str(e)}")
                 continue
 
         return transactions
@@ -260,10 +264,10 @@ def import_csv_to_database(csv_path: Path, database):
     transactions = parser.parse_csv(csv_path)
 
     if not transactions:
-        print(f"No transactions found in {csv_path}")
+        logger.info(f"No transactions found in {csv_path}")
         return 0, 0
 
     inserted, skipped = database.insert_transactions(transactions)
-    print(f"Import complete: {inserted} new transactions, {skipped} duplicates skipped")
+    logger.info(f"Import complete: {inserted} new transactions, {skipped} duplicates skipped")
 
     return inserted, skipped

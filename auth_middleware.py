@@ -9,8 +9,12 @@ import requests
 from functools import wraps
 from flask import request, jsonify, g
 from dotenv import load_dotenv
+from logging_config import get_logger
 
 load_dotenv()
+
+# Initialize logger
+logger = get_logger('auth')
 
 # Clerk configuration
 CLERK_JWKS_URL = os.getenv('CLERK_JWKS_URL', '')
@@ -31,11 +35,14 @@ def get_jwks():
         raise ValueError("CLERK_JWKS_URL not configured")
 
     try:
+        logger.debug(f"Fetching JWKS from {CLERK_JWKS_URL}")
         response = requests.get(CLERK_JWKS_URL, timeout=10)
         response.raise_for_status()
         _jwks_cache = response.json()
+        logger.debug("JWKS fetched and cached successfully")
         return _jwks_cache
     except requests.RequestException as e:
+        logger.error(f"Failed to fetch JWKS: {str(e)}")
         raise ValueError(f"Failed to fetch JWKS: {str(e)}")
 
 
@@ -94,8 +101,10 @@ def verify_clerk_token(token):
         return payload
 
     except jwt.ExpiredSignatureError:
+        logger.warning("Token verification failed: expired token")
         raise ValueError("Token has expired")
     except jwt.InvalidTokenError as e:
+        logger.warning(f"Token verification failed: {str(e)}")
         raise ValueError(f"Invalid token: {str(e)}")
 
 
@@ -123,12 +132,14 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         # Skip auth in development if no Clerk keys configured
         if not CLERK_JWKS_URL and os.getenv('FLASK_DEBUG', '').lower() == 'true':
+            logger.debug("Auth bypassed in dev mode (no Clerk keys configured)")
             g.current_user = {'sub': 'dev-user', 'email': 'dev@localhost', 'role': 'admin'}
             return f(*args, **kwargs)
 
         token = get_token_from_request()
 
         if not token:
+            logger.warning(f"Missing auth token for {request.method} {request.path}")
             return jsonify({
                 'success': False,
                 'error': 'Authorization header required'
@@ -140,6 +151,7 @@ def require_auth(f):
             return f(*args, **kwargs)
 
         except ValueError as e:
+            logger.warning(f"Auth failed for {request.method} {request.path}: {str(e)}")
             return jsonify({
                 'success': False,
                 'error': str(e)
@@ -185,12 +197,14 @@ def require_admin(f):
         user = db.get_user_by_auth_id(g.current_user.get('sub'))
 
         if not user:
+            logger.warning(f"User not found in database: {g.current_user.get('sub')}")
             return jsonify({
                 'success': False,
                 'error': 'User not found in database'
             }), 403
 
         if user.get('role') != 'admin':
+            logger.warning(f"Admin access denied for user {g.current_user.get('sub')} (role: {user.get('role')})")
             return jsonify({
                 'success': False,
                 'error': 'Admin access required'
