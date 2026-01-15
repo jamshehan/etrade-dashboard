@@ -12,6 +12,12 @@ let currentUser = null;
 let authEnabled = false;
 let clerk = null;
 
+// Feature detection
+let features = {
+    scraping_enabled: true,
+    csv_import_enabled: true
+};
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
     await initializeAuth();
@@ -209,9 +215,52 @@ async function signOut() {
 function initializeApp() {
     initializeTabs();
     initializeButtons();
+    checkFeatures();
     loadTransactions();
     loadCategories();
     loadSources();
+}
+
+// Feature detection
+async function checkFeatures() {
+    try {
+        const token = authToken || (clerk && clerk.session ? await clerk.session.getToken() : null);
+        if (!token) {
+            console.log('No auth token available for feature detection');
+            return;
+        }
+
+        const response = await fetch(`${API_BASE}/features`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await response.json();
+        if (result.success) {
+            features = result.data;
+            updateUIForFeatures();
+            console.log('Environment:', features.environment);
+        }
+    } catch (err) {
+        console.error('Feature detection failed:', err);
+    }
+}
+
+function updateUIForFeatures() {
+    // Hide scrape button if not available
+    const scrapBtn = document.getElementById('scrapBtn');
+    if (scrapBtn && !features.scraping_enabled) {
+        scrapBtn.style.display = 'none';
+    }
+
+    // Hide CSV import button if not available
+    const importBtn = document.getElementById('importCsvBtn');
+    if (importBtn && !features.csv_import_enabled) {
+        importBtn.style.display = 'none';
+    }
+
+    // Optional: Show environment indicator
+    if (features.environment === 'production') {
+        console.log('Production mode - scraping/CSV import disabled');
+    }
 }
 
 // Tab navigation

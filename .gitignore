@@ -33,3 +33,6 @@ Thumbs.db
 
 # Playwright
 playwright/.local-browsers/
+
+# Vercel
+.vercel

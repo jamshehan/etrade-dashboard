@@ -17,5 +17,6 @@ python-dateutil==2.8.2
 # Environment management
 python-dotenv==1.0.0
 
-# Web scraping (local development only, not for production)
+# Web scraping (LOCAL DEVELOPMENT ONLY - excluded from production via conditional imports)
+# Not bundled in Vercel deployment due to IS_VERCEL runtime check
 playwright==1.41.0

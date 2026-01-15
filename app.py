@@ -2,17 +2,30 @@ from flask import Flask, jsonify, request, send_from_directory, g
 from flask_cors import CORS
 from pathlib import Path
 import config
-from csv_parser import import_csv_to_database
-from scraper import ETradeScraper
 from projections import calculate_projections
 from auth_middleware import require_auth, require_admin
 from logging_config import get_logger
 import traceback
 import hmac
 import hashlib
+import os
+
+# Detect Vercel serverless environment
+IS_VERCEL = os.getenv('VERCEL', '').lower() == '1'
 
 # Initialize logger
 logger = get_logger('api')
+logger.info(f"Environment: {'Vercel (serverless)' if IS_VERCEL else 'Local'}")
+
+# Conditional imports for serverless compatibility
+if IS_VERCEL:
+    # These features require local filesystem/browser - not available in serverless
+    ETradeScraper = None
+    import_csv_to_database = None
+    logger.info("Serverless mode: scraper and filesystem imports disabled")
+else:
+    from csv_parser import import_csv_to_database
+    from scraper import ETradeScraper
 
 # Use PostgreSQL if DATABASE_URL is set, otherwise SQLite
 if config.USE_POSTGRES:
@@ -25,7 +38,7 @@ else:
     IntegrityError = sqlite3.IntegrityError
 
 
-app = Flask(__name__, static_folder='static', static_url_path='')
+app = Flask(__name__, static_folder='public', static_url_path='')
 app.config['SECRET_KEY'] = config.FLASK_SECRET_KEY
 CORS(app)
 
@@ -96,7 +109,7 @@ def handle_exception(error):
 @app.route('/')
 def index():
     """Serve the main HTML page"""
-    return send_from_directory('static', 'index.html')
+    return send_from_directory('public', 'index.html')
 
 
 @app.route('/api/transactions', methods=['GET'])
@@ -294,7 +307,17 @@ def import_csv():
     """
     Import CSV file from specified path
     Body: { csv_path: string }
+    NOTE: Only available in local environment (requires filesystem access)
     """
+    if IS_VERCEL:
+        logger.warning("CSV import attempt in production environment")
+        return jsonify({
+            'success': False,
+            'error': 'CSV import from filesystem not available in production.',
+            'suggestion': 'Use web scraper in local environment or implement file upload feature',
+            'code': 'FEATURE_UNAVAILABLE_PRODUCTION'
+        }), 501
+
     try:
         data = request.get_json()
 
@@ -335,7 +358,17 @@ def scrape_transactions():
     """
     Trigger web scraper to download transactions
     Body: { start_date: string, end_date: string } (optional)
+    NOTE: Only available in local environment (requires Playwright)
     """
+    if IS_VERCEL:
+        logger.warning("Scrape attempt in production environment")
+        return jsonify({
+            'success': False,
+            'error': 'Scraping not available in production. Use this feature in local environment.',
+            'reason': 'Requires Playwright browser binaries and filesystem access',
+            'code': 'FEATURE_UNAVAILABLE_PRODUCTION'
+        }), 501
+
     try:
         data = request.get_json() or {}
 
@@ -547,6 +580,24 @@ def get_contribution_statistics():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/features', methods=['GET'])
+@require_auth
+def get_features():
+    """
+    Get available features based on environment.
+    Frontend uses this to show/hide unavailable features.
+    """
+    return jsonify({
+        'success': True,
+        'data': {
+            'environment': 'production' if IS_VERCEL else 'local',
+            'scraping_enabled': not IS_VERCEL,
+            'csv_import_enabled': not IS_VERCEL,
+            'database_type': 'postgresql' if config.USE_POSTGRES else 'sqlite'
+        }
+    })
 
 
 # Authentication Endpoints

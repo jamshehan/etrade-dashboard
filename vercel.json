@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "app.py": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "env": {
+    "FLASK_DEBUG": "false"
+  }
+}
