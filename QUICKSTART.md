@@ -1,6 +1,8 @@
 # Quick Start Guide
 
-Get your eTrade Transaction Dashboard up and running in minutes!
+Get your Mortgage Payment Account Dashboard up and running locally in minutes!
+
+> **Production Site**: The app is deployed at [www.hansen.onl](https://www.hansen.onl)
 
 ## Step 1: Install Dependencies
 
@@ -9,17 +11,25 @@ pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-## Step 2: Configure Credentials
+## Step 2: Configure Environment
 
-Create a `.env` file from the example:
+Create a `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your eTrade credentials:
+Edit `.env`:
 
 ```
+# Leave DATABASE_URL empty to use SQLite locally
+DATABASE_URL=
+
+# Flask settings
+FLASK_DEBUG=True
+FLASK_SECRET_KEY=dev-secret-key
+
+# Optional: Bank credentials for scraper
 ETRADE_USERNAME=your_username
 ETRADE_PASSWORD=your_password
 ```
@@ -28,7 +38,7 @@ ETRADE_PASSWORD=your_password
 
 Before setting up the scraper, test with a manually downloaded CSV:
 
-1. Log into eTrade
+1. Log into your bank
 2. Download a transaction CSV
 3. Import it:
 
@@ -44,9 +54,11 @@ python cli.py serve
 
 Open your browser to: `http://localhost:5000`
 
+> **Note**: In debug mode without Clerk configured, authentication is bypassed and you get admin access automatically.
+
 ## Step 5: Configure the Scraper (Optional)
 
-To enable automatic scraping, you need to customize the web scraper with the correct CSS selectors for eTrade:
+To enable automatic scraping, customize the web scraper with the correct CSS selectors:
 
 ### Option A: Interactive Test Mode
 
@@ -64,7 +76,6 @@ This will:
 1. Open `scraper.py`
 2. Find the `_login()`, `_navigate_to_checking()`, and `_download_csv()` methods
 3. Update the CSS selectors marked with `TODO` comments
-4. The selectors currently in the file are examples and will need to be customized
 
 ### Testing the Scraper
 
@@ -73,12 +84,6 @@ Once configured, test it:
 ```bash
 python cli.py scrape
 ```
-
-This will:
-1. Open a headless browser
-2. Log into eTrade
-3. Download the transaction CSV
-4. Import it to the database
 
 ## Common Commands
 
@@ -95,7 +100,7 @@ python cli.py search "grocery"
 # Import a CSV
 python cli.py import path/to/file.csv
 
-# Scrape eTrade
+# Scrape account (local only)
 python cli.py scrape
 
 # Start web server
@@ -120,13 +125,13 @@ Check that your CSV has columns: Date, Description, Amount
 
 ## Next Steps
 
-1. Explore the Overview tab to see your transaction summary
-2. Use the Transactions tab to search and filter
-3. Check the Statistics tab for detailed analytics
+1. Explore the Transactions tab to see your transaction list
+2. Use the Statistics tab for analytics
+3. Set up Contributions to track payments by person
 4. Try the Projections tab to forecast your future balance
 
 ## Need Help?
 
 - Check the full README.md for detailed documentation
-- Review the code comments in each Python file
+- Review CLAUDE.MD for development context
 - Check error messages in the console for hints

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Command-line interface for eTrade Transaction Dashboard
+Command-line interface for Mortgage Payment Account Dashboard
 """
 
 import argparse
@@ -197,7 +197,7 @@ def cmd_search(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='eTrade Transaction Dashboard CLI',
+        description='Mortgage Payment Account Dashboard CLI',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
