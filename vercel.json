@@ -1,11 +1,14 @@
 {
   "functions": {
-    "app.py": {
+    "api/index.py": {
       "maxDuration": 60,
       "memory": 1024
     }
   },
-  "env": {
-    "FLASK_DEBUG": "false"
-  }
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ]
 }
