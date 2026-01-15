@@ -22,9 +22,13 @@ USE_POSTGRES = DATABASE_URL is not None
 DOWNLOAD_DIR = Path(os.getenv('DOWNLOAD_DIR', BASE_DIR / 'data' / 'downloads'))
 DB_PATH = Path(os.getenv('DB_PATH', BASE_DIR / 'data' / 'transactions.db'))
 
-# Create directories if they don't exist
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Detect Vercel serverless environment (read-only filesystem)
+IS_VERCEL = os.getenv('VERCEL', '').lower() == '1'
+
+# Create directories only in local environment (Vercel has read-only filesystem)
+if not IS_VERCEL:
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Flask settings
 FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
