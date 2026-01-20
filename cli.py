@@ -6,10 +6,15 @@ Command-line interface for Mortgage Payment Account Dashboard
 import argparse
 import sys
 from pathlib import Path
-from database import TransactionDatabase
 from csv_parser import import_csv_to_database
 from scraper import ETradeScraper
 import config
+
+# Use PostgreSQL if DATABASE_URL is set, otherwise SQLite
+if config.USE_POSTGRES:
+    from database_pg import TransactionDatabase
+else:
+    from database import TransactionDatabase
 
 
 def cmd_import(args):

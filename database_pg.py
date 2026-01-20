@@ -243,8 +243,11 @@ class TransactionDatabase:
 
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                for txn in transactions:
+                for i, txn in enumerate(transactions):
+                    savepoint_name = f"txn_insert_{i}"
                     try:
+                        # Create savepoint before each insert
+                        cursor.execute(f"SAVEPOINT {savepoint_name}")
                         cursor.execute('''
                             INSERT INTO transactions
                             (transaction_date, description, amount, balance, category, source, csv_hash)
@@ -258,10 +261,12 @@ class TransactionDatabase:
                             txn.get('source'),
                             txn.get('csv_hash')
                         ))
+                        # Release savepoint on success
+                        cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
                         inserted += 1
                     except errors.UniqueViolation:
-                        # Duplicate transaction - rollback this specific insert
-                        conn.rollback()
+                        # Duplicate transaction - rollback only to savepoint
+                        cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
                         skipped += 1
                         continue
 
