@@ -9,16 +9,23 @@ class ETradeScraper:
     """
     Web scraper for eTrade checking account transactions
 
-    NOTE: This is a template that will need to be customized based on
-    the actual eTrade website structure and selectors.
+    Uses a persistent browser profile so that eTrade's "trust this device"
+    cookie survives between runs. After initial MFA setup, subsequent runs
+    can execute headlessly without user intervention.
     """
 
-    def __init__(self, username: str = None, password: str = None):
+    # Persistent browser profile directory (preserves cookies/device trust)
+    BROWSER_PROFILE_DIR = config.BASE_DIR / 'data' / 'browser_profile'
+
+    def __init__(self, username: str = None, password: str = None, headless: bool = None):
         self.username = username or config.ETRADE_USERNAME
         self.password = password or config.ETRADE_PASSWORD
         self.download_dir = config.DOWNLOAD_DIR
-        self.headless = config.HEADLESS
+        self.headless = headless if headless is not None else config.HEADLESS
         self.timeout = config.SCRAPER_TIMEOUT
+
+        # Ensure browser profile directory exists
+        self.BROWSER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
         if not self.username or not self.password:
             raise ValueError("eTrade credentials not configured. Set ETRADE_USERNAME and ETRADE_PASSWORD in .env file")
@@ -35,13 +42,20 @@ class ETradeScraper:
             Path to downloaded CSV file
         """
         with sync_playwright() as playwright:
-            # Force non-headless for MFA handling
-            browser = playwright.chromium.launch(headless=False)
-
-            # Configure browser context with download directory
-            context = browser.new_context(
+            # Use persistent context to preserve cookies & device trust
+            # Use channel="chrome" to use a stock Chrome-like fingerprint
+            # and avoid eTrade detecting Playwright automation
+            print(f"Launching browser (headless={self.headless}, profile={self.BROWSER_PROFILE_DIR})")
+            context = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.BROWSER_PROFILE_DIR),
+                headless=self.headless,
+                channel="chrome",
                 accept_downloads=True,
-                viewport={'width': 1920, 'height': 1080}
+                viewport={'width': 1920, 'height': 1080},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                ],
             )
 
             page = context.new_page()
@@ -59,6 +73,12 @@ class ETradeScraper:
                 # Handle MFA if needed
                 self._handle_mfa(page)
 
+                # Use the most recent page in case eTrade opened a new tab
+                pages = context.pages
+                if len(pages) > 1:
+                    print(f"Multiple pages detected ({len(pages)}), using most recent")
+                    page = pages[-1]
+
                 # Navigate directly to download page
                 csv_path = self._download_csv(page, start_date, end_date)
 
@@ -74,7 +94,6 @@ class ETradeScraper:
 
             finally:
                 context.close()
-                browser.close()
 
     def _login(self, page: Page):
         """
@@ -115,71 +134,84 @@ class ETradeScraper:
             # Wait for page to fully load and all redirects to complete
             print("Waiting for page to finish loading and redirects to complete...")
             page.wait_for_load_state('networkidle', timeout=self.timeout)
-            time.sleep(1)
+            time.sleep(2)
 
             current_url = page.url
             print(f"Current URL after load: {current_url}")
 
-            # Check if we're on the send OTP page
+            # Check if we bounced back to the actual login page (session expired)
+            # Note: /etx/pxy/login is a post-login proxy page, NOT the login form
+            if "/e/t/user/login" in current_url or "/user/login" in current_url and "/etx/" not in current_url:
+                print("WARNING: Redirected back to login page!")
+                print("This may mean eTrade rejected the session.")
+                print("Attempting to re-login...")
+                self._login(page)
+                page.wait_for_load_state('networkidle', timeout=self.timeout)
+                time.sleep(2)
+                current_url = page.url
+                print(f"URL after re-login: {current_url}")
+
+            # Check if we're on the send OTP page or verify page
             if "sendotpcode" in current_url:
-                print("MFA required - triggering SMS code...")
-
-                # Wait for the send OTP button to be visible
-                page.wait_for_selector('#sendOTPCodeBtn', timeout=self.timeout)
-                page.click('#sendOTPCodeBtn')
-
-                print("SMS code requested, waiting for verification page...")
-
-                # Wait for verification code page
-                page.wait_for_url("**/verifyotpcode", timeout=self.timeout)
-                time.sleep(1)
-
                 print("\n" + "="*60)
-                print("MFA CODE REQUIRED")
+                print("MFA REQUIRED — MANUAL ACTION NEEDED")
                 print("="*60)
-                print("1. Check your phone for the SMS code from eTrade")
-                print("2. Enter the code in the browser window that opened")
-                print("3. Check the 'Save this device' checkbox to skip MFA next time")
-                print("4. Click Submit")
+                print("1. In the browser window, click 'Send Security Code'")
+                print("2. Check your phone for the SMS code from eTrade")
+                print("3. Enter the code in the browser")
+                print("4. CHECK 'Save this device' to skip MFA next time!")
+                print("5. Click Submit")
                 print("="*60 + "\n")
 
-                # Wait for user to manually enter code and submit
-                # We'll wait until we're no longer on the verifyotpcode page
-                print("Waiting for MFA submission...")
+                # Wait for user to complete the full MFA flow
+                print("Waiting for MFA completion (up to 3 minutes)...")
                 try:
-                    page.wait_for_url(lambda url: "verifyotpcode" not in url, timeout=120000)  # 2 minutes
+                    page.wait_for_url(
+                        lambda url: "sendotpcode" not in url and "verifyotpcode" not in url,
+                        timeout=180000
+                    )
                 except Exception as e:
-                    print(f"Error waiting for URL change: {e}")
+                    print(f"Error waiting for MFA: {e}")
                     print(f"Current URL: {page.url}")
-                    raise Exception("Timeout or error waiting for MFA submission")
+                    raise Exception("Timeout or error waiting for MFA completion")
 
                 print("MFA completed successfully")
                 time.sleep(3)
 
             elif "verifyotpcode" in current_url:
-                # Already on verification page (shouldn't normally happen)
                 print("\n" + "="*60)
-                print("MFA CODE REQUIRED")
+                print("MFA CODE ENTRY — MANUAL ACTION NEEDED")
                 print("="*60)
-                print("1. Check your phone for the SMS code")
-                print("2. Enter the code in the browser window")
-                print("3. Check 'Save this device' to skip MFA next time")
-                print("4. Click Submit")
+                print("1. Enter the SMS code in the browser")
+                print("2. CHECK 'Save this device' to skip MFA next time!")
+                print("3. Click Submit")
                 print("="*60 + "\n")
 
-                print("Waiting for MFA submission...")
+                print("Waiting for MFA completion (up to 3 minutes)...")
                 try:
-                    page.wait_for_url(lambda url: "verifyotpcode" not in url, timeout=120000)  # 2 minutes
+                    page.wait_for_url(
+                        lambda url: "verifyotpcode" not in url,
+                        timeout=180000
+                    )
                 except Exception as e:
-                    print(f"Error waiting for URL change: {e}")
+                    print(f"Error waiting for MFA: {e}")
                     print(f"Current URL: {page.url}")
-                    raise Exception("Timeout or error waiting for MFA submission")
+                    raise Exception("Timeout or error waiting for MFA completion")
 
                 print("MFA completed successfully")
                 time.sleep(3)
 
             else:
                 print(f"No MFA required - device already trusted (URL: {current_url})")
+
+            # Wait for post-login redirects to fully settle
+            print("Waiting for post-login navigation to settle...")
+            time.sleep(3)
+            try:
+                page.wait_for_load_state('networkidle', timeout=15000)
+            except Exception:
+                pass  # Timeout is okay — some pages keep polling
+            print(f"Settled on: {page.url}")
 
         except Exception as e:
             raise Exception(f"MFA handling failed: {str(e)}")
@@ -191,9 +223,14 @@ class ETradeScraper:
         print("Navigating to download page...")
 
         try:
-            # Navigate directly to the download page
-            page.goto("https://bankus.etrade.com/e/t/ibank/downloadofxtransactions", timeout=self.timeout)
-            time.sleep(2)
+            # Navigate to download page — use wait_until domcontentloaded
+            # since networkidle can be flaky on eTrade's heavy pages
+            page.goto(
+                "https://bankus.etrade.com/e/t/ibank/downloadofxtransactions",
+                timeout=self.timeout,
+                wait_until='domcontentloaded'
+            )
+            time.sleep(3)
 
             # Wait for account selector
             page.wait_for_selector('#AcctNum', timeout=self.timeout)
@@ -210,8 +247,8 @@ class ETradeScraper:
                 date_obj = datetime.strptime(start_date, '%Y-%m-%d')
                 formatted_start = date_obj.strftime('%m/%d/%y')
             else:
-                # Default to 90 days ago
-                formatted_start = (datetime.now() - timedelta(days=90)).strftime('%m/%d/%y')
+                # Default to 85 days ago (eTrade enforces a 3-month/~90-day max)
+                formatted_start = (datetime.now() - timedelta(days=85)).strftime('%m/%d/%y')
 
             if end_date:
                 date_obj = datetime.strptime(end_date, '%Y-%m-%d')
@@ -227,7 +264,7 @@ class ETradeScraper:
 
             # Click download button and wait for file
             print("Downloading CSV...")
-            with page.expect_download() as download_info:
+            with page.expect_download(timeout=60000) as download_info:
                 page.click('button:has-text("Download")')
 
             download = download_info.value
@@ -252,8 +289,11 @@ class ETradeScraper:
         This method will pause at each step to allow manual inspection
         """
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
-            context = browser.new_context(viewport={'width': 1920, 'height': 1080})
+            context = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self.BROWSER_PROFILE_DIR),
+                headless=False,
+                viewport={'width': 1920, 'height': 1080},
+            )
             page = context.new_page()
 
             print("\n=== eTrade Selector Test Mode ===")
@@ -293,7 +333,6 @@ class ETradeScraper:
             finally:
                 input("\nPress Enter to close browser...")
                 context.close()
-                browser.close()
 
 
 if __name__ == "__main__":
