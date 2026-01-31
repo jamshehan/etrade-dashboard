@@ -921,16 +921,25 @@ function displayContributionStatistics(stats) {
     document.getElementById('totalContributionAmount').textContent = formatCurrency(totalAmount);
     document.getElementById('contributionTxnCount').textContent = totalCount;
 
-    // Calculate monthly averages from monthly_by_person data
+    // Calculate monthly averages using calendar months from first contribution to now
     const monthlyData = stats.monthly_by_person || [];
-    const monthCountByPerson = {};
+    const earliestMonthByPerson = {};
 
     monthlyData.forEach(item => {
-        if (!monthCountByPerson[item.person_name]) {
-            monthCountByPerson[item.person_name] = new Set();
+        if (!earliestMonthByPerson[item.person_name] || item.month < earliestMonthByPerson[item.person_name]) {
+            earliestMonthByPerson[item.person_name] = item.month;
         }
-        monthCountByPerson[item.person_name].add(item.month);
     });
+
+    // Count calendar months from earliest contribution month to current month
+    const now = new Date();
+    const currentYM = now.getFullYear() * 12 + now.getMonth(); // months since epoch
+    const calendarMonthsByPerson = {};
+    for (const [person, earliest] of Object.entries(earliestMonthByPerson)) {
+        const [y, m] = earliest.split('-').map(Number);
+        const startYM = y * 12 + (m - 1);
+        calendarMonthsByPerson[person] = Math.max(1, currentYM - startYM + 1);
+    }
 
     // Display by person with monthly averages
     const byPersonContainer = document.getElementById('contributionsByPerson');
@@ -948,7 +957,7 @@ function displayContributionStatistics(stats) {
                 </thead>
                 <tbody>
                     ${byPerson.map(person => {
-                        const monthCount = monthCountByPerson[person.person_name] ? monthCountByPerson[person.person_name].size : 1;
+                        const monthCount = calendarMonthsByPerson[person.person_name] || 1;
                         const monthlyAvg = person.total / monthCount;
                         return `
                             <tr>
