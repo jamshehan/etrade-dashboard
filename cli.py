@@ -44,10 +44,24 @@ def cmd_scrape(args):
     print("Starting eTrade scraper...")
 
     try:
+        start_date = args.start_date
+        end_date = args.end_date
+
+        # If no start date provided, use the most recent transaction date from DB
+        if not start_date:
+            try:
+                db = TransactionDatabase()
+                stats = db.get_statistics()
+                if stats.get('latest_date'):
+                    start_date = str(stats['latest_date'])
+                    print(f"Using last transaction date as start: {start_date}")
+            except Exception as e:
+                print(f"Could not query DB for latest date: {e}")
+
         scraper = ETradeScraper()
         csv_path = scraper.download_transactions(
-            start_date=args.start_date,
-            end_date=args.end_date
+            start_date=start_date,
+            end_date=end_date
         )
 
         print(f"\nDownload successful: {csv_path}")

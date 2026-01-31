@@ -247,8 +247,7 @@ class ETradeScraper:
                 date_obj = datetime.strptime(start_date, '%Y-%m-%d')
                 formatted_start = date_obj.strftime('%m/%d/%y')
             else:
-                # Default to 30 days ago (eTrade enforces a 3-month max;
-                # 30 days is plenty for daily automated scraping)
+                # Fallback: 30 days ago (only used if DB has no transactions)
                 formatted_start = (datetime.now() - timedelta(days=30)).strftime('%m/%d/%y')
 
             if end_date:
