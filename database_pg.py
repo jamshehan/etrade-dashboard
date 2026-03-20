@@ -56,10 +56,24 @@ class TransactionDatabase:
 
     @contextmanager
     def get_connection(self):
-        """Get a connection from the pool with automatic cleanup"""
+        """Get a connection from the pool with automatic cleanup.
+        Handles stale SSL connections in serverless environments (Vercel)."""
         conn = None
         try:
             conn = TransactionDatabase._pool.getconn()
+            # Test if connection is still alive (SSL may have been closed)
+            try:
+                conn.cursor().execute("SELECT 1")
+            except Exception:
+                logger.warning("Stale connection detected, reconnecting...")
+                # Return the dead connection and reset the pool
+                try:
+                    TransactionDatabase._pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+                TransactionDatabase._pool = None
+                self._init_pool()
+                conn = TransactionDatabase._pool.getconn()
             conn.autocommit = False
             yield conn
         except Exception as e:
@@ -67,7 +81,10 @@ class TransactionDatabase:
             raise
         finally:
             if conn:
-                TransactionDatabase._pool.putconn(conn)
+                try:
+                    TransactionDatabase._pool.putconn(conn)
+                except Exception:
+                    pass
 
     def init_database(self):
         """Initialize database schema"""
