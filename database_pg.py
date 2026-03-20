@@ -122,9 +122,21 @@ class TransactionDatabase:
                     pass
 
     def init_database(self):
-        """Initialize database schema"""
+        """Initialize database schema (skips if tables already exist)"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
+                # Quick check: if transactions table exists, skip schema init
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'transactions'
+                    )
+                """)
+                if cursor.fetchone()[0]:
+                    logger.info("Database schema already exists, skipping init")
+                    return
+
+                logger.info("Creating database schema...")
                 # Create users table for authentication
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS users (
