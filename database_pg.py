@@ -44,10 +44,15 @@ class TransactionDatabase:
         if TransactionDatabase._pool is None:
             logger.info("Initializing PostgreSQL connection pool")
             try:
+                # Append sslmode=require if not already specified (needed for Vercel/Neon)
+                dsn = self.database_url
+                if 'sslmode' not in dsn:
+                    separator = '&' if '?' in dsn else '?'
+                    dsn = f"{dsn}{separator}sslmode=require"
                 TransactionDatabase._pool = pool.SimpleConnectionPool(
                     minconn=1,
-                    maxconn=10,
-                    dsn=self.database_url
+                    maxconn=3,  # Lower for serverless (short-lived functions)
+                    dsn=dsn
                 )
                 logger.info("PostgreSQL connection pool initialized successfully")
             except Exception as e:
@@ -63,12 +68,20 @@ class TransactionDatabase:
             conn = TransactionDatabase._pool.getconn()
             # Test if connection is still alive (SSL may have been closed)
             try:
-                conn.cursor().execute("SELECT 1")
+                cur = conn.cursor()
+                cur.execute("SELECT 1")
+                cur.close()
             except Exception:
-                logger.warning("Stale connection detected, reconnecting...")
-                # Return the dead connection and reset the pool
+                logger.warning("Stale connection detected, resetting pool...")
+                # Close the dead connection directly, don't return to pool
                 try:
-                    TransactionDatabase._pool.putconn(conn, close=True)
+                    conn.close()
+                except Exception:
+                    pass
+                conn = None
+                # Reset and reinitialize the pool
+                try:
+                    TransactionDatabase._pool.closeall()
                 except Exception:
                     pass
                 TransactionDatabase._pool = None
@@ -78,9 +91,14 @@ class TransactionDatabase:
             yield conn
         except Exception as e:
             logger.error(f"Database connection error: {e}")
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             raise
         finally:
-            if conn:
+            if conn and TransactionDatabase._pool:
                 try:
                     TransactionDatabase._pool.putconn(conn)
                 except Exception:
