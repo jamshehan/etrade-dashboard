@@ -85,9 +85,11 @@ class TransactionDatabase:
             conn = TransactionDatabase._pool.getconn()
             # Test if connection is still alive (SSL may have been closed)
             try:
+                conn.autocommit = True
                 cur = conn.cursor()
                 cur.execute("SELECT 1")
                 cur.close()
+                conn.autocommit = False
             except Exception:
                 logger.warning("Stale connection detected, resetting pool...")
                 # Close the dead connection directly, don't return to pool
@@ -104,7 +106,7 @@ class TransactionDatabase:
                 TransactionDatabase._pool = None
                 self._init_pool()
                 conn = TransactionDatabase._pool.getconn()
-            conn.autocommit = False
+                conn.autocommit = False
             yield conn
         except Exception as e:
             logger.error(f"Database connection error: {e}")
