@@ -70,20 +70,22 @@ async function initializeAuth() {
 async function loadClerkSDK(publishableKey) {
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
+        script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
         script.crossOrigin = 'anonymous';
         script.setAttribute('data-clerk-publishable-key', publishableKey);
 
         script.onload = async () => {
             try {
-                // Wait for Clerk to be available
-                clerk = window.Clerk;
-
-                if (!clerk) {
+                // Initialize Clerk - try new constructor pattern first, fall back to global
+                if (window.Clerk && typeof window.Clerk === 'function') {
+                    clerk = new window.Clerk(publishableKey);
+                } else if (window.Clerk) {
+                    clerk = window.Clerk;
+                } else {
                     throw new Error('Clerk SDK not available');
                 }
 
-                // Load Clerk (newer API doesn't require 'new')
+                // Load Clerk with UI components
                 if (typeof clerk.load === 'function') {
                     await clerk.load();
                 }
