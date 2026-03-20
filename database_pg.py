@@ -32,12 +32,14 @@ class TransactionDatabase:
 
     _pool = None
 
+    _schema_initialized = False
+
     def __init__(self, database_url: str = None):
         self.database_url = database_url or os.getenv('DATABASE_URL') or os.getenv('POSTGRES_URL')
         if not self.database_url:
             raise ValueError("DATABASE_URL or POSTGRES_URL environment variable required")
-        self._init_pool()
-        self.init_database()
+        # Lazy initialization - don't connect until first use
+        # This prevents cold-start crashes in serverless environments
 
     def _init_pool(self):
         """Initialize connection pool (singleton for serverless)"""
@@ -59,10 +61,25 @@ class TransactionDatabase:
                 logger.error(f"Failed to initialize connection pool: {e}")
                 raise
 
+    _initializing_schema = False
+
+    def _ensure_pool(self):
+        """Ensure pool is initialized and schema is created (lazy init)."""
+        if TransactionDatabase._pool is None:
+            self._init_pool()
+        if not TransactionDatabase._schema_initialized and not TransactionDatabase._initializing_schema:
+            TransactionDatabase._initializing_schema = True
+            try:
+                self.init_database()
+                TransactionDatabase._schema_initialized = True
+            finally:
+                TransactionDatabase._initializing_schema = False
+
     @contextmanager
     def get_connection(self):
         """Get a connection from the pool with automatic cleanup.
         Handles stale SSL connections in serverless environments (Vercel)."""
+        self._ensure_pool()
         conn = None
         try:
             conn = TransactionDatabase._pool.getconn()
